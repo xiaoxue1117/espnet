@@ -11,7 +11,6 @@ from espnet.nets.pytorch_backend.nets_utils import to_device
 
 class CTC(torch.nn.Module):
     """CTC module
-
     :param int odim: dimension of outputs
     :param int eprojs: number of encoder projection units
     :param float dropout_rate: dropout rate (0.0 ~ 1.0)
@@ -29,14 +28,14 @@ class CTC(torch.nn.Module):
         # In case of Pytorch >= 1.7.0, CTC will be always builtin
         self.ctc_type = (
             ctc_type
-            if LooseVersion(torch.__version__) < LooseVersion("1.7.0")
+            if LooseVersion(torch.__version__) < LooseVersion("1.4.0")
             else "builtin"
         )
         if ctc_type != self.ctc_type:
             logging.warning(f"CTC was set to {self.ctc_type} due to PyTorch version.")
         if self.ctc_type == "builtin":
             reduction_type = "sum" if reduce else "none"
-            self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type)
+            self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type, zero_infinity=True)
         elif self.ctc_type == "warpctc":
             import warpctc_pytorch as warp_ctc
 
@@ -66,7 +65,6 @@ class CTC(torch.nn.Module):
 
     def forward(self, hs_pad, hlens, ys_pad):
         """CTC forward
-
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
         :param torch.Tensor hlens: batch of lengths of hidden state sequences (B)
         :param torch.Tensor ys_pad:
@@ -74,45 +72,15 @@ class CTC(torch.nn.Module):
         :return: ctc loss value
         :rtype: torch.Tensor
         """
-        # TODO(kan-bayashi): need to make more smart way
-        ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
-
-        self.loss = None
-        hlens = torch.from_numpy(np.fromiter(hlens, dtype=np.int32))
-        olens = torch.from_numpy(np.fromiter((x.size(0) for x in ys), dtype=np.int32))
-
         # zero padding for hs
         ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
-
-        # zero padding for ys
-        ys_true = torch.cat(ys).cpu().int()  # batch x olen
-
-        # get length info
-        logging.info(
-            self.__class__.__name__
-            + " input lengths:  "
-            + "".join(str(hlens).split("\n"))
-        )
-        logging.info(
-            self.__class__.__name__
-            + " output lengths: "
-            + "".join(str(olens).split("\n"))
-        )
-
-        # get ctc loss
-        # expected shape of seqLength x batchSize x alphabet_size
-        dtype = ys_hat.dtype
         ys_hat = ys_hat.transpose(0, 1)
-        if self.ctc_type == "warpctc" or dtype == torch.float16:
-            # warpctc only supports float32
-            # torch.ctc does not support float16 (#1751)
-            ys_hat = ys_hat.to(dtype=torch.float32)
-        if self.ctc_type == "builtin":
-            # use GPU when using the cuDNN implementation
-            ys_true = to_device(hs_pad, ys_true)
-        self.loss = to_device(hs_pad, self.loss_fn(ys_hat, ys_true, hlens, olens)).to(
-            dtype=dtype
-        )
+        ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
+        olens = to_device(ys_hat,torch.LongTensor([len(s) for s in ys]))
+        hlens = hlens.long()
+
+        #self.loss = to_device(hs_pad, self.loss_fn(ys_hat, ys_pad, hlens, olens)).to(dtype=dtype)
+        self.loss = self.loss_fn(ys_hat, ys_pad, hlens, olens)
         if self.reduce:
             # NOTE: sum() is needed to keep consistency
             # since warpctc return as tensor w/ shape (1,)
@@ -120,11 +88,44 @@ class CTC(torch.nn.Module):
             self.loss = self.loss.sum()
             logging.info("ctc loss:" + str(float(self.loss)))
 
-        return self.loss
+        return self.loss, ys_hat.transpose(0,1)
+        ##ctc_loss(input, target, input_lengths, target_lengths)
+
+
+
+        #self.loss = None
+        #hlens = torch.from_numpy(np.fromiter(hlens, dtype=np.int32))
+        #olens = torch.from_numpy(np.fromiter((x.size(0) for x in ys), dtype=np.int32))
+
+
+        ## zero padding for ys
+        #ys_true = torch.cat(ys).cpu().int()  # batch x olen
+
+        ## get length info
+        #logging.info(
+        #    self.__class__.__name__
+        #    + " input lengths:  "
+        #    + "".join(str(hlens).split("\n"))
+        #)
+        #logging.info(
+        #    self.__class__.__name__
+        #    + " output lengths: "
+        #    + "".join(str(olens).split("\n"))
+        #)
+
+        ## get ctc loss
+        ## expected shape of seqLength x batchSize x alphabet_size
+        #dtype = ys_hat.dtype
+        #if self.ctc_type == "warpctc" or dtype == torch.float16:
+        #    # warpctc only supports float32
+        #    # torch.ctc does not support float16 (#1751)
+        #    ys_hat = ys_hat.to(dtype=torch.float32)
+        #if self.ctc_type == "builtin":
+        #    # use GPU when using the cuDNN implementation
+        #    ys_true = to_device(hs_pad, ys_true)
 
     def softmax(self, hs_pad):
         """softmax of frame activations
-
         :param torch.Tensor hs_pad: 3d tensor (B, Tmax, eprojs)
         :return: log softmax applied 3d tensor (B, Tmax, odim)
         :rtype: torch.Tensor
@@ -134,7 +135,6 @@ class CTC(torch.nn.Module):
 
     def log_softmax(self, hs_pad):
         """log_softmax of frame activations
-
         :param torch.Tensor hs_pad: 3d tensor (B, Tmax, eprojs)
         :return: log softmax applied 3d tensor (B, Tmax, odim)
         :rtype: torch.Tensor
@@ -143,7 +143,6 @@ class CTC(torch.nn.Module):
 
     def argmax(self, hs_pad):
         """argmax of frame activations
-
         :param torch.Tensor hs_pad: 3d tensor (B, Tmax, eprojs)
         :return: argmax applied 2d tensor (B, Tmax)
         :rtype: torch.Tensor
@@ -152,7 +151,6 @@ class CTC(torch.nn.Module):
 
     def forced_align(self, h, y, blank_id=0):
         """forced alignment.
-
         :param torch.Tensor h: hidden state sequence, 2d tensor (T, D)
         :param torch.Tensor y: id sequence tensor 1d tensor (L)
         :param int y: blank symbol index
@@ -218,7 +216,6 @@ class CTC(torch.nn.Module):
 
 def ctc_for(args, odim, reduce=True):
     """Returns the CTC module for the given args and output dimension
-
     :param Namespace args: the program args
     :param int odim : The output dimension
     :param bool reduce : return the CTC loss in a scalar

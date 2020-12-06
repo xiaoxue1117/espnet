@@ -514,6 +514,26 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--fbank-fmin", type=float, default=0.0, help="")
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
+    # multilingual
+    parser.add_argument(
+        "--pn-elayers",
+        type=int,
+        default=2,
+        help="",
+    )
+    parser.add_argument(
+        "--pn-enc-aheads",
+        type=int,
+        default=4,
+        help="",
+    )
+    parser.add_argument(
+        "--pn-input-layer",
+        type=str,
+        default="nothing",
+        help="",
+        )
+
     return parser
 
 

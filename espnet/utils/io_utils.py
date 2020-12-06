@@ -106,10 +106,10 @@ class LoadInputsAndTargets(object):
         x_feats_dict = OrderedDict()  # OrderedDict[str, List[np.ndarray]]
         y_feats_dict = OrderedDict()  # OrderedDict[str, List[np.ndarray]]
         uttid_list = []  # List[str]
-
+        uttcat_list = []
         for uttid, info in batch:
             uttid_list.append(uttid)
-
+            uttcat_list.append(info["category"])
             if self.load_input:
                 # Note(kamo): This for-loop is for multiple inputs
                 for idx, inp in enumerate(info["input"]):
@@ -188,7 +188,8 @@ class LoadInputsAndTargets(object):
                     )
 
         # Doesn't return the names now.
-        return tuple(return_batch.values())
+        #return tuple(return_batch.values(), uttcat_list)
+        return tuple(list(return_batch.values()) + [uttcat_list])
 
     def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):
         """Create a OrderedDict for the mini-batch

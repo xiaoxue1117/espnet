@@ -438,7 +438,6 @@ def make_batchset(
     category2data = {}  # Dict[str, dict]
     for k, v in data.items():
         category2data.setdefault(v.get("category"), {})[k] = v
-
     batches_list = []  # List[List[List[Tuple[str, dict]]]]
     for d in category2data.values():
         if batch_sort_key == "shuffle":
@@ -500,6 +499,5 @@ def make_batchset(
     if num_batches > 0:
         batches = batches[:num_batches]
     logging.info("# minibatches: " + str(len(batches)))
-
     # batch: List[List[Tuple[str, dict]]]
     return batches

@@ -67,20 +67,21 @@ class E2E(ASRInterface, torch.nn.Module):
         """Return PlotAttentionReport."""
         return PlotAttentionReport
 
-    def __init__(self, idim, odim, args, ignore_id=-1):
+    def __init__(self, idim, odim, langdict, args, ignore_id=-1):
         """Construct an E2E object.
 
         :param int idim: dimension of inputs
         :param int odim: dimension of outputs
+        :param dict langdict: {'phone' : phone_dim, 'langid' : phoneme_dim, ... }
         :param Namespace args: argument Namespace containing options
         """
         torch.nn.Module.__init__(self)
-
         # fill missing arguments for compatibility
         args = fill_missing_args(args, self.add_arguments)
 
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
+        # speech encoder
         self.encoder = Encoder(
             idim=idim,
             selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
@@ -96,31 +97,85 @@ class E2E(ASRInterface, torch.nn.Module):
             positional_dropout_rate=args.dropout_rate,
             attention_dropout_rate=args.transformer_attn_dropout_rate,
         )
-        if args.mtlalpha < 1:
-            self.decoder = Decoder(
-                odim=odim,
-                selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
-                attention_dim=args.adim,
-                attention_heads=args.aheads,
-                conv_wshare=args.wshare,
-                conv_kernel_length=args.ldconv_decoder_kernel_length,
-                conv_usebias=args.ldconv_usebias,
-                linear_units=args.dunits,
-                num_blocks=args.dlayers,
-                dropout_rate=args.dropout_rate,
-                positional_dropout_rate=args.dropout_rate,
-                self_attention_dropout_rate=args.transformer_attn_dropout_rate,
-                src_attention_dropout_rate=args.transformer_attn_dropout_rate,
-            )
-            self.criterion = LabelSmoothingLoss(
-                odim,
-                ignore_id,
-                args.lsm_weight,
-                args.transformer_length_normalized_loss,
-            )
-        else:
-            self.decoder = None
-            self.criterion = None
+        # speech decoder
+        #if args.mtlalpha < 1:
+        #    self.decoder = Decoder(
+        #        odim=odim,
+        #        selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
+        #        attention_dim=args.adim,
+        #        attention_heads=args.aheads,
+        #        conv_wshare=args.wshare,
+        #        conv_kernel_length=args.ldconv_decoder_kernel_length,
+        #        conv_usebias=args.ldconv_usebias,
+        #        linear_units=args.dunits,
+        #        num_blocks=args.dlayers,
+        #        dropout_rate=args.dropout_rate,
+        #        positional_dropout_rate=args.dropout_rate,
+        #        self_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #        src_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #    )
+        #    self.criterion = LabelSmoothingLoss(
+        #        odim,
+        #        ignore_id,
+        #        args.lsm_weight,
+        #        args.transformer_length_normalized_loss,
+        #    )
+        #else:
+        self.decoder = None
+        self.criterion = None
+
+        self.langdict = langdict
+        # pronunciation models
+        self.pn_enc = torch.nn.ModuleDict()
+        self.pn_dec = torch.nn.ModuleDict()
+        for lid in langdict.keys():
+            self.pn_enc[lid] = Encoder(
+                    idim=langdict[lid],
+                    selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+                    attention_dim=args.adim,
+                    attention_heads=args.pn_enc_aheads,
+                    linear_units=args.eunits,
+                    num_blocks=args.pn_elayers,
+                    input_layer=args.pn_input_layer,
+                    dropout_rate=args.dropout_rate,
+                    positional_dropout_rate=args.dropout_rate,
+                    attention_dropout_rate=args.transformer_attn_dropout_rate,
+                )
+            self.pn_dec[lid] = Decoder(
+                    odim=odim,
+                    selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
+                    attention_dim=args.adim,
+                    attention_heads=args.aheads,
+                    conv_wshare=args.wshare,
+                    conv_kernel_length=args.ldconv_decoder_kernel_length,
+                    conv_usebias=args.ldconv_usebias,
+                    linear_units=args.dunits,
+                    num_blocks=args.dlayers,
+                    dropout_rate=args.dropout_rate,
+                    positional_dropout_rate=args.dropout_rate,
+                    self_attention_dropout_rate=args.transformer_attn_dropout_rate,
+                    src_attention_dropout_rate=args.transformer_attn_dropout_rate,
+                )
+
+        self.criterion = LabelSmoothingLoss(
+            odim,
+            ignore_id,
+            args.lsm_weight,
+            args.transformer_length_normalized_loss,
+        )
+        
+        # phone output
+        self.phone_out = torch.nn.Sequential(
+                                torch.nn.Linear(args.adim, langdict['phone']),
+                                torch.nn.Dropout(args.dropout_rate))
+
+        # allophone layer
+        self.alloW = torch.nn.ParameterDict()
+        for lid in langdict.keys():
+            self.alloW[lid] = torch.nn.Parameter(torch.zeros(langdict[lid], langdict['phone']))
+            #self.allo[lid] = torch.nn.Linear(langdict['phone'], langdict[lid])
+            # TODO: init w/ allovera and apply regularizer
+
         self.blank = 0
         self.sos = odim - 1
         self.eos = odim - 1
@@ -132,12 +187,14 @@ class E2E(ASRInterface, torch.nn.Module):
         self.reset_parameters(args)
         self.adim = args.adim  # used for CTC (equal to d_model)
         self.mtlalpha = args.mtlalpha
-        if args.mtlalpha > 0.0:
-            self.ctc = CTC(
-                odim, args.adim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #if args.mtlalpha > 0.0:
+        self.ctc = torch.nn.ModuleDict()
+        for lid in langdict.keys():
+            self.ctc[lid] = CTC(
+                langdict[lid], langdict[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
             )
-        else:
-            self.ctc = None
+        #else:
+        #    self.ctc = None 
 
         if args.report_cer or args.report_wer:
             self.error_calculator = ErrorCalculator(
@@ -156,7 +213,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # initialize parameters
         initialize(self, args.transformer_init)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad, ys_ph_pad, cats):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
@@ -173,41 +230,77 @@ class E2E(ASRInterface, torch.nn.Module):
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
         hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
-        self.hs_pad = hs_pad
+        #self.hs_pad = hs_pad
 
         # 2. forward decoder
-        if self.decoder is not None:
-            ys_in_pad, ys_out_pad = add_sos_eos(
-                ys_pad, self.sos, self.eos, self.ignore_id
-            )
-            ys_mask = target_mask(ys_in_pad, self.ignore_id)
-            pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
-            self.pred_pad = pred_pad
+        #if self.decoder is not None:
+        #    ys_in_pad, ys_out_pad = add_sos_eos(
+        #        ys_pad, self.sos, self.eos, self.ignore_id
+        #    )
+        #    ys_mask = target_mask(ys_in_pad, self.ignore_id)
+        #    pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
+        #    self.pred_pad = pred_pad
 
-            # 3. compute attention loss
-            loss_att = self.criterion(pred_pad, ys_out_pad)
-            self.acc = th_accuracy(
-                pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
-            )
-        else:
-            loss_att = None
-            self.acc = None
-
+        #    # 3. compute attention loss
+        #    loss_att = self.criterion(pred_pad, ys_out_pad)
+        #    self.acc = th_accuracy(
+        #        pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
+        #    )
+        #else:
+        #    loss_att = None
+        #    self.acc = None
+        
+        # phone out
+        hs_pad = self.phone_out(hs_pad) 
+        
+        # allophone layer
+        if len(set(cats)) > 1:
+            logging.warning("Batch is mixed")
+            logging.warning(cats)
+        lid = cats[0]
+        hs_pad = hs_pad.unsqueeze(2)
+        hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
+        hs_pad = torch.max(hs_pad, -1)[0]
+        
+        # CTC
+        batch_size = xs_pad.size(0)
+        hs_len = hs_mask.view(batch_size, -1).sum(1)
+        loss_ctc, hs_pad = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
+        cer_ctc = None
+        if not self.training and self.error_calculator is not None:
+            ys_ph_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
+            cer_ctc = self.error_calculator(ys_ph_hat.cpu(), ys_ph_pad.cpu(), is_ctc=True)
+        # for visualization
+        if not self.training:
+            self.ctc.softmax(hs_pad)
+        
+        # Pronunciation
+        hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
+        ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
+        ys_mask = target_mask(ys_in_pad, self.ignore_id)
+        pred_pad, pred_mask = self.pn_dec[lid](ys_in_pad, ys_mask, hs_pad, hs_mask)
+        self.pred_pad = pred_pad
+        
+        loss_att = self.criterion(pred_pad, ys_out_pad)
+        self.acc = th_accuracy(
+            pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
+        )
+        
         # TODO(karita) show predicted text
         # TODO(karita) calculate these stats
-        cer_ctc = None
-        if self.mtlalpha == 0.0:
-            loss_ctc = None
-        else:
-            batch_size = xs_pad.size(0)
-            hs_len = hs_mask.view(batch_size, -1).sum(1)
-            loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
-            if not self.training and self.error_calculator is not None:
-                ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
-                cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
-            # for visualization
-            if not self.training:
-                self.ctc.softmax(hs_pad)
+        #cer_ctc = None
+        #if self.mtlalpha == 0.0:
+        #    loss_ctc = None
+        #else:
+        #    batch_size = xs_pad.size(0)
+        #    hs_len = hs_mask.view(batch_size, -1).sum(1)
+        #    loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
+        #    if not self.training and self.error_calculator is not None:
+        #        ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
+        #        cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
+        #    # for visualization
+        #    if not self.training:
+        #        self.ctc.softmax(hs_pad)
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None or self.decoder is None:
