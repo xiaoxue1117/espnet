@@ -73,7 +73,8 @@ class CTC(torch.nn.Module):
         :rtype: torch.Tensor
         """
         # zero padding for hs
-        ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        #ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        ys_hat = F.dropout(hs_pad, p=self.dropout_rate)
         ys_hat = ys_hat.transpose(0, 1)
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
         olens = to_device(ys_hat,torch.LongTensor([len(s) for s in ys]))

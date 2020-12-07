@@ -162,7 +162,7 @@ def load_trained_model(model_path):
         model_path (str): Path to model.***.best
 
     """
-    idim, odim, train_args = get_model_conf(
+    idim, odim, langdict, alloWdict, train_args = get_model_conf(
         model_path, os.path.join(os.path.dirname(model_path), "model.json")
     )
 
@@ -177,7 +177,7 @@ def load_trained_model(model_path):
         train_args.ctc_type = "builtin"
 
     model_class = dynamic_import(model_module)
-    model = model_class(idim, odim, train_args)
+    model = model_class(idim, odim, langdict, alloWdict, train_args)
 
     torch_load(model_path, model)
 

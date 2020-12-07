@@ -1034,6 +1034,7 @@ def recog(args):
                 logging.info("(%d/%d) decoding " + name, idx, len(js.keys()))
                 batch = [(name, js[name])]
                 feat = load_inputs_and_targets(batch)
+                cat = feat[1][0]
                 feat = (
                     feat[0][0]
                     if args.num_encs == 1
@@ -1086,8 +1087,9 @@ def recog(args):
                 elif hasattr(model, "rnnt_mode"):
                     nbest_hyps = model.recognize(feat, beam_search_transducer)
                 else:
+                    # add cat
                     nbest_hyps = model.recognize(
-                        feat, args, train_args.char_list, rnnlm
+                        feat, cat, args, train_args.char_list, rnnlm
                     )
                 new_js[name] = add_results_to_json(
                     js[name], nbest_hyps, train_args.char_list

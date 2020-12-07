@@ -188,7 +188,7 @@ class LoadInputsAndTargets(object):
                     )
 
         # Doesn't return the names now.
-        #return tuple(return_batch.values(), uttcat_list)
+        #return tuple(return_batch.values())
         return tuple(list(return_batch.values()) + [uttcat_list])
 
     def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):

@@ -262,7 +262,8 @@ class E2E(ASRInterface, torch.nn.Module):
         lid = cats[0]
         hs_pad = hs_pad.unsqueeze(2)
         hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
-        hs_pad = torch.max(hs_pad, -1)[0]
+        hs_pad = hs_pad.sum(dim=-1)/(self.alloW[lid].sum(dim=-1)+0.000001)
+        #hs_pad = torch.max(hs_pad, -1)[0]
         
         # CTC
         batch_size = xs_pad.size(0)
@@ -351,7 +352,7 @@ class E2E(ASRInterface, torch.nn.Module):
         enc_output, _ = self.encoder(x, None)
         return enc_output.squeeze(0)
 
-    def recognize(self, x, recog_args, char_list=None, rnnlm=None, use_jit=False):
+    def recognize(self, x, cat, recog_args, char_list=None, rnnlm=None, use_jit=False):
         """Recognize input speech.
 
         :param ndnarray x: input acoustic feature (B, T, D) or (T, D)
@@ -361,29 +362,33 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: N-best decoding results
         :rtype: list
         """
-        import pdb; pdb.set_trace()
-        enc_output = self.encode(x).unsqueeze(0)
+        out = self.encode(x).unsqueeze(0)
+        out = self.phone_out(out)
+        out = out.unsqueeze(2)
+        out = out * self.alloW[cat].unsqueeze(0).unsqueeze(0)
+        out = out.sum(dim=-1)/(self.alloW[cat].sum(dim=-1)+0.000001)
+        
         if self.mtlalpha == 1.0:
             recog_args.ctc_weight = 1.0
             logging.info("Set to pure CTC decoding mode.")
 
-        if self.mtlalpha > 0 and recog_args.ctc_weight == 1.0:
-            from itertools import groupby
+        #if self.mtlalpha > 0 and recog_args.ctc_weight == 1.0:
+        #    from itertools import groupby
 
-            lpz = self.ctc.argmax(enc_output)
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
-            return nbest_hyps
-        elif self.mtlalpha > 0 and recog_args.ctc_weight > 0.0:
-            lpz = self.ctc.log_softmax(enc_output)
-            lpz = lpz.squeeze(0)
-        else:
-            lpz = None
-
+        #    lpz = self.ctc.argmax(enc_output)
+        #    collapsed_indices = [x[0] for x in groupby(lpz[0])]
+        #    hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
+        #    nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+        #    if recog_args.beam_size > 1:
+        #        raise NotImplementedError("Pure CTC beam search is not implemented.")
+        #    # TODO(hirofumi0810): Implement beam search
+        #    return nbest_hyps
+        #elif self.mtlalpha > 0 and recog_args.ctc_weight > 0.0:
+        #    lpz = self.ctc.log_softmax(enc_output)
+        #    lpz = lpz.squeeze(0)
+        #else:
+        lpz = None
+        enc_output,_ = self.pn_enc[cat](out, None)
         h = enc_output.squeeze(0)
 
         logging.info("input lengths: " + str(h.size(0)))
@@ -443,7 +448,7 @@ class E2E(ASRInterface, torch.nn.Module):
                         )
                     local_att_scores = traced_decoder(ys, ys_mask, enc_output)[0]
                 else:
-                    local_att_scores = self.decoder.forward_one_step(
+                    local_att_scores = self.pn_dec[cat].forward_one_step(
                         ys, ys_mask, enc_output
                     )[0]
 
