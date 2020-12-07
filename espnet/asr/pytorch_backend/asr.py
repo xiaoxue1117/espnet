@@ -421,7 +421,16 @@ def train(args):
         logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
     logging.info("#output dims: " + str(odim))
     
-    langdict = {'phone': 51, '105': 37, '106': 36, '107': 42}
+    import glob
+    langdict = {}
+    alloWdict = {}
+    for f in glob.glob(args.phonemap_np+"*"):
+        m = np.load(f, allow_pickle=True)
+        lang = f[-3:]
+        langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
+        alloWdict.update({lang : m.tolist()})
+    
+    #langdict = {'phone': 51, '105': 37, '106': 36, '107': 42}
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:
@@ -444,11 +453,11 @@ def train(args):
         logging.info("Multitask learning mode")
 
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
-        model = load_trained_modules(idim_list[0], odim, langdict, args)
+        model = load_trained_modules(idim_list[0], odim, langdict, alloWdict, args)
     else:
         model_class = dynamic_import(args.model_module)
         model = model_class(
-            idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, args
+            idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, alloWdict, args
         )
     assert isinstance(model, ASRInterface)
 
@@ -473,7 +482,7 @@ def train(args):
         logging.info("writing a model config file to " + model_conf)
         f.write(
             json.dumps(
-                (idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, vars(args)),
+                (idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, alloWdict, vars(args)),
                 indent=4,
                 ensure_ascii=False,
                 sort_keys=True,
@@ -694,57 +703,57 @@ def train(args):
         or mtl_mode == "transformer_transducer"
     )
 
-    if args.num_save_attention > 0 and is_attn_plot:
-        data = sorted(
-            list(valid_json.items())[: args.num_save_attention],
-            key=lambda x: int(x[1]["input"][0]["shape"][1]),
-            reverse=True,
-        )
-        if hasattr(model, "module"):
-            att_vis_fn = model.module.calculate_all_attentions
-            plot_class = model.module.attention_plot_class
-        else:
-            att_vis_fn = model.calculate_all_attentions
-            plot_class = model.attention_plot_class
-        att_reporter = plot_class(
-            att_vis_fn,
-            data,
-            args.outdir + "/att_ws",
-            converter=converter,
-            transform=load_cv,
-            device=device,
-        )
-        trainer.extend(att_reporter, trigger=(1, "epoch"))
-    else:
-        att_reporter = None
+    #if args.num_save_attention > 0 and is_attn_plot:
+    #    data = sorted(
+    #        list(valid_json.items())[: args.num_save_attention],
+    #        key=lambda x: int(x[1]["input"][0]["shape"][1]),
+    #        reverse=True,
+    #    )
+    #    if hasattr(model, "module"):
+    #        att_vis_fn = model.module.calculate_all_attentions
+    #        plot_class = model.module.attention_plot_class
+    #    else:
+    #        att_vis_fn = model.calculate_all_attentions
+    #        plot_class = model.attention_plot_class
+    #    att_reporter = plot_class(
+    #        att_vis_fn,
+    #        data,
+    #        args.outdir + "/att_ws",
+    #        converter=converter,
+    #        transform=load_cv,
+    #        device=device,
+    #    )
+    #    trainer.extend(att_reporter, trigger=(1, "epoch"))
+    #else:
+    att_reporter = None
 
-    # Save CTC prob at each epoch
-    if mtl_mode in ["ctc", "mtl"] and args.num_save_ctc > 0:
-        # NOTE: sort it by output lengths
-        data = sorted(
-            list(valid_json.items())[: args.num_save_ctc],
-            key=lambda x: int(x[1]["output"][0]["shape"][0]),
-            reverse=True,
-        )
-        if hasattr(model, "module"):
-            ctc_vis_fn = model.module.calculate_all_ctc_probs
-            plot_class = model.module.ctc_plot_class
-        else:
-            ctc_vis_fn = model.calculate_all_ctc_probs
-            plot_class = model.ctc_plot_class
-        ctc_reporter = plot_class(
-            ctc_vis_fn,
-            data,
-            args.outdir + "/ctc_prob",
-            converter=converter,
-            transform=load_cv,
-            device=device,
-            ikey="output",
-            iaxis=1,
-        )
-        trainer.extend(ctc_reporter, trigger=(1, "epoch"))
-    else:
-        ctc_reporter = None
+    ## Save CTC prob at each epoch
+    #if mtl_mode in ["ctc", "mtl"] and args.num_save_ctc > 0:
+    #    # NOTE: sort it by output lengths
+    #    data = sorted(
+    #        list(valid_json.items())[: args.num_save_ctc],
+    #        key=lambda x: int(x[1]["output"][0]["shape"][0]),
+    #        reverse=True,
+    #    )
+    #    if hasattr(model, "module"):
+    #        ctc_vis_fn = model.module.calculate_all_ctc_probs
+    #        plot_class = model.module.ctc_plot_class
+    #    else:
+    #        ctc_vis_fn = model.calculate_all_ctc_probs
+    #        plot_class = model.ctc_plot_class
+    #    ctc_reporter = plot_class(
+    #        ctc_vis_fn,
+    #        data,
+    #        args.outdir + "/ctc_prob",
+    #        converter=converter,
+    #        transform=load_cv,
+    #        device=device,
+    #        ikey="output",
+    #        iaxis=1,
+    #    )
+    #    trainer.extend(ctc_reporter, trigger=(1, "epoch"))
+    #else:
+    ctc_reporter = None
 
     # Make a plot for training and validation values
     if args.num_encs > 1:
@@ -1164,7 +1173,7 @@ def enhance(args):
     """
     set_deterministic_pytorch(args)
     # read training config
-    idim, odim, langdict, train_args = get_model_conf(args.model, args.model_conf)
+    idim, odim, langdict, alloWdict, train_args = get_model_conf(args.model, args.model_conf)
 
     # TODO(ruizhili): implement enhance for multi-encoder model
     assert args.num_encs == 1, "number of encoder should be 1 ({} is given)".format(
@@ -1174,7 +1183,7 @@ def enhance(args):
     # load trained model parameters
     logging.info("reading model parameters from " + args.model)
     model_class = dynamic_import(train_args.model_module)
-    model = model_class(idim, odim, langdict, train_args)
+    model = model_class(idim, odim, langdict, alloWdict, train_args)
     assert isinstance(model, ASRInterface)
     torch_load(args.model, model)
     model.recog_args = args

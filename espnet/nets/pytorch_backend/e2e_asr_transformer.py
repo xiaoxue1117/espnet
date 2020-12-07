@@ -67,7 +67,7 @@ class E2E(ASRInterface, torch.nn.Module):
         """Return PlotAttentionReport."""
         return PlotAttentionReport
 
-    def __init__(self, idim, odim, langdict, args, ignore_id=-1):
+    def __init__(self, idim, odim, langdict, alloWdict, args, ignore_id=-1):
         """Construct an E2E object.
 
         :param int idim: dimension of inputs
@@ -171,11 +171,13 @@ class E2E(ASRInterface, torch.nn.Module):
 
         # allophone layer
         self.alloW = torch.nn.ParameterDict()
-        for lid in langdict.keys():
-            self.alloW[lid] = torch.nn.Parameter(torch.zeros(langdict[lid], langdict['phone']))
+        for lid in alloWdict.keys():
+            self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
+            self.alloW[lid].requires_grad = False
+            #self.alloW[lid] = torch.nn.Parameter(torch.zeros(langdict[lid], langdict['phone']))
             #self.allo[lid] = torch.nn.Linear(langdict['phone'], langdict[lid])
             # TODO: init w/ allovera and apply regularizer
-
+        
         self.blank = 0
         self.sos = odim - 1
         self.eos = odim - 1
@@ -268,11 +270,11 @@ class E2E(ASRInterface, torch.nn.Module):
         loss_ctc, hs_pad = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
         cer_ctc = None
         if not self.training and self.error_calculator is not None:
-            ys_ph_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
+            ys_ph_hat = self.ctc[lid].argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
             cer_ctc = self.error_calculator(ys_ph_hat.cpu(), ys_ph_pad.cpu(), is_ctc=True)
         # for visualization
         if not self.training:
-            self.ctc.softmax(hs_pad)
+            self.ctc[lid].softmax(hs_pad)
         
         # Pronunciation
         hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
@@ -359,6 +361,7 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: N-best decoding results
         :rtype: list
         """
+        import pdb; pdb.set_trace()
         enc_output = self.encode(x).unsqueeze(0)
         if self.mtlalpha == 1.0:
             recog_args.ctc_weight = 1.0
@@ -569,7 +572,7 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         return nbest_hyps
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pad, ys_ph_pad, cats):
         """E2E attention calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -578,24 +581,25 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: attention weights (B, H, Lmax, Tmax)
         :rtype: float ndarray
         """
-        self.eval()
-        with torch.no_grad():
-            self.forward(xs_pad, ilens, ys_pad)
-        ret = dict()
-        for name, m in self.named_modules():
-            if (
-                isinstance(m, MultiHeadedAttention)
-                or isinstance(m, DynamicConvolution)
-                or isinstance(m, RelPositionMultiHeadedAttention)
-            ):
-                ret[name] = m.attn.cpu().numpy()
-            if isinstance(m, DynamicConvolution2D):
-                ret[name + "_time"] = m.attn_t.cpu().numpy()
-                ret[name + "_freq"] = m.attn_f.cpu().numpy()
-        self.train()
-        return ret
+        return 0.0
+        #self.eval()
+        #with torch.no_grad():
+        #    self.forward(xs_pad, ilens, ys_pad, ys_ph_pad, cats)
+        #ret = dict()
+        #for name, m in self.named_modules():
+        #    if (
+        #        isinstance(m, MultiHeadedAttention)
+        #        or isinstance(m, DynamicConvolution)
+        #        or isinstance(m, RelPositionMultiHeadedAttention)
+        #    ):
+        #        ret[name] = m.attn.cpu().numpy()
+        #    if isinstance(m, DynamicConvolution2D):
+        #        ret[name + "_time"] = m.attn_t.cpu().numpy()
+        #        ret[name + "_freq"] = m.attn_f.cpu().numpy()
+        #self.train()
+        #return ret
 
-    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad):
+    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad, ys_ph_pad, cats):
         """E2E CTC probability calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax)
@@ -604,15 +608,16 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: CTC probability (B, Tmax, vocab)
         :rtype: float ndarray
         """
-        ret = None
-        if self.mtlalpha == 0:
-            return ret
+        return 0.0
+        #ret = None
+        #if self.mtlalpha == 0:
+        #    return ret
 
-        self.eval()
-        with torch.no_grad():
-            self.forward(xs_pad, ilens, ys_pad)
-        for name, m in self.named_modules():
-            if isinstance(m, CTC) and m.probs is not None:
-                ret = m.probs.cpu().numpy()
-        self.train()
-        return ret
+        #self.eval()
+        #with torch.no_grad():
+        #    self.forward(xs_pad, ilens, ys_pad)
+        #for name, m in self.named_modules():
+        #    if isinstance(m, CTC) and m.probs is not None:
+        #        ret = m.probs.cpu().numpy()
+        #self.train()
+        #return ret
