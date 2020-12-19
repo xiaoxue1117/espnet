@@ -10,6 +10,48 @@ import torch
 
 from espnet.nets.pytorch_backend.transformer.embedding import PositionalEncoding
 
+class Conv1d(torch.nn.Module):
+    """Convolutional 2D subsampling (to 1/4 length).
+    :param int idim: input dim
+    :param int odim: output dim
+    :param flaot dropout_rate: dropout rate
+    :param torch.nn.Module pos_enc: custom position encoding layer
+    """
+
+    def __init__(self, idim, odim, kernel_size, padding, use_layer_norm=False):
+        """Construct an Conv2dSubsampling object."""
+        super(Conv1d, self).__init__()
+        self.conv = torch.nn.Sequential(
+            torch.nn.Conv2d(1, odim, (kernel_size, idim), padding=(padding, 0)),
+        )
+        self.use_layer_norm = use_layer_norm
+        if self.use_layer_norm:
+            self.layer_norm = torch.nn.LayerNorm(odim)
+
+    def forward(self, x):
+        """Subsample x.
+        :param torch.Tensor x: input tensor
+        :param torch.Tensor x_mask: input mask
+        :return: subsampled x and mask
+        :rtype Tuple[torch.Tensor, torch.Tensor]
+        """
+        x = x.unsqueeze(1)  # b x 1 x t x o
+        x = self.conv(x)    # b x o x t x 1
+        x = x.squeeze(-1).transpose(1,2)    # b x t x o
+        
+        if self.use_layer_norm:
+            x = self.layer_norm(x)
+
+        return x
+
+    def __getitem__(self, key):
+        """Subsample x.
+        When reset_parameters() is called, if use_scaled_pos_enc is used,
+            return the positioning encoding.
+        """
+        if key != -1:
+            raise NotImplementedError("Support only `-1` (for `reset_parameters`).")
+        return self.out[key]
 
 class Conv2dSubsampling(torch.nn.Module):
     """Convolutional 2D subsampling (to 1/4 length).

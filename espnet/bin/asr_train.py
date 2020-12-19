@@ -539,7 +539,18 @@ def get_parser(parser=None, required=True):
         default=None,
         help="",
     )
-
+    parser.add_argument(
+        "--allotype",
+        type=str,
+        default='max',
+        help="",
+    )
+    parser.add_argument(
+        "--pn-type",
+        type=str,
+        default='attn',
+        help="",
+    )
     return parser
 
 

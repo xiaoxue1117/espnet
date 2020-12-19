@@ -22,7 +22,7 @@ class CTC(torch.nn.Module):
         super().__init__()
         self.dropout_rate = dropout_rate
         self.loss = None
-        self.ctc_lo = torch.nn.Linear(eprojs, odim)
+        #self.ctc_lo = torch.nn.Linear(eprojs, odim)
         self.probs = None  # for visualization
 
         # In case of Pytorch >= 1.7.0, CTC will be always builtin
@@ -74,11 +74,19 @@ class CTC(torch.nn.Module):
         """
         # zero padding for hs
         #ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
-        ys_hat = F.dropout(hs_pad, p=self.dropout_rate)
+        #ys_hat = F.dropout(hs_pad, p=self.dropout_rate)
+        ys_hat = hs_pad
         ys_hat = ys_hat.transpose(0, 1)
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
         olens = to_device(ys_hat,torch.LongTensor([len(s) for s in ys]))
         hlens = hlens.long()
+        
+        #count = 0
+        #for o, h in zip(olens, hlens):
+        #    if h < o:
+        #        count += 1
+        #        logging.warning("len is too short: " + str(h) + " vs " + str(o)) 
+        #logging.warning("len is too short for: " + str(count / len(olens)) + "%")
 
         #self.loss = to_device(hs_pad, self.loss_fn(ys_hat, ys_pad, hlens, olens)).to(dtype=dtype)
         self.loss = self.loss_fn(ys_hat, ys_pad, hlens, olens)
@@ -131,7 +139,8 @@ class CTC(torch.nn.Module):
         :return: log softmax applied 3d tensor (B, Tmax, odim)
         :rtype: torch.Tensor
         """
-        self.probs = F.softmax(self.ctc_lo(hs_pad), dim=2)
+        #self.probs = F.softmax(self.ctc_lo(hs_pad), dim=2)
+        self.probs = F.softmax(hs_pad, dim=2)
         return self.probs
 
     def log_softmax(self, hs_pad):
@@ -140,7 +149,8 @@ class CTC(torch.nn.Module):
         :return: log softmax applied 3d tensor (B, Tmax, odim)
         :rtype: torch.Tensor
         """
-        return F.log_softmax(self.ctc_lo(hs_pad), dim=2)
+        #return F.log_softmax(self.ctc_lo(hs_pad), dim=2)
+        return F.log_softmax(hs_pad, dim=2)
 
     def argmax(self, hs_pad):
         """argmax of frame activations
@@ -148,7 +158,8 @@ class CTC(torch.nn.Module):
         :return: argmax applied 2d tensor (B, Tmax)
         :rtype: torch.Tensor
         """
-        return torch.argmax(self.ctc_lo(hs_pad), dim=2)
+        #return torch.argmax(self.ctc_lo(hs_pad), dim=2)
+        return torch.argmax(hs_pad, dim=2)
 
     def forced_align(self, h, y, blank_id=0):
         """forced alignment.

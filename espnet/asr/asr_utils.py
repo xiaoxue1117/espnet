@@ -805,7 +805,7 @@ def parse_hypothesis(hyp, char_list):
     return text, token, tokenid, score
 
 
-def add_results_to_json(js, nbest_hyps, char_list):
+def add_results_to_json(js, nbest_hyps, ph_hyps, char_list, align):
     """Add N-best results to json.
 
     Args:
@@ -822,7 +822,6 @@ def add_results_to_json(js, nbest_hyps, char_list):
     new_js = dict()
     new_js["utt2spk"] = js["utt2spk"]
     new_js["output"] = []
-
     for n, hyp in enumerate(nbest_hyps, 1):
         # parse hypothesis
         rec_text, rec_token, rec_tokenid, score = parse_hypothesis(hyp, char_list)
@@ -830,6 +829,7 @@ def add_results_to_json(js, nbest_hyps, char_list):
         # copy ground-truth
         if len(js["output"]) > 0:
             out_dic = dict(js["output"][0].items())
+            ph_ref = dict(js["output"][1].items())
         else:
             # for no reference case (e.g., speech translation)
             out_dic = {"name": ""}
@@ -851,6 +851,18 @@ def add_results_to_json(js, nbest_hyps, char_list):
             if "text" in out_dic.keys():
                 logging.info("groundtruth: %s" % out_dic["text"])
             logging.info("prediction : %s" % out_dic["rec_text"])
+            
+            #phonemes
+            ph_hyps = " ".join([str(i) for i in ph_hyps])
+            out_dic = {"rec_token": ph_hyps, "token": ph_ref["tokenid"]}
+            new_js["output"].append(out_dic)
+            logging.info("ph gt: %s" % ph_ref["tokenid"])
+            logging.info("ph pred: %s" % ph_hyps)
+
+        #add alignments
+        if align is not None:
+            out_dic = {"phones": align[0], "phonemes": align[1], "tokens": align[2]}
+            new_js["output"].append(out_dic)
 
     return new_js
 

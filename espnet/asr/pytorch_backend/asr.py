@@ -1088,11 +1088,11 @@ def recog(args):
                     nbest_hyps = model.recognize(feat, beam_search_transducer)
                 else:
                     # add cat
-                    nbest_hyps = model.recognize(
+                    nbest_hyps, ph_hyps, align = model.recognize(
                         feat, cat, args, train_args.char_list, rnnlm
                     )
                 new_js[name] = add_results_to_json(
-                    js[name], nbest_hyps, train_args.char_list
+                        js[name], nbest_hyps, ph_hyps, train_args.char_list, align
                 )
 
     else:

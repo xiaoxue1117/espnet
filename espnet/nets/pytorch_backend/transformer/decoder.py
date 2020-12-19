@@ -80,6 +80,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
     def __init__(
         self,
         odim,
+        embed_dim=-1,
         selfattention_layer_type="selfattn",
         attention_dim=256,
         attention_heads=4,

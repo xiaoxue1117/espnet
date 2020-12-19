@@ -28,7 +28,7 @@ from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling6
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling8
-
+from espnet.nets.pytorch_backend.transformer.subsampling import Conv1d
 
 def _pre_hook(
     state_dict,
@@ -136,6 +136,8 @@ class Encoder(torch.nn.Module):
             )
         elif input_layer == "nothing":
             self.embed = None
+        elif input_layer == "conv1drf3":
+            self.embed = Conv1d(idim, attention_dim, 3, 1)
         else:
             raise ValueError("unknown input_layer: " + input_layer)
         self.normalize_before = normalize_before

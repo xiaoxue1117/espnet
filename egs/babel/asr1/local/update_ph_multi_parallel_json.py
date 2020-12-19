@@ -75,7 +75,8 @@ def get_ph_dets(l):
         tokens = tokens[:-1]
     else:
         if args.no_punct:
-            epi_fn = epi.xsampa_list
+            #epi_fn = epi.xsampa_list
+            epi_fn = epi.trans_list
         else:
             epi_fn = epi.trans_list
 

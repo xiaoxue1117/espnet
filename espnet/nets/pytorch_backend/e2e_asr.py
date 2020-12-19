@@ -48,8 +48,8 @@ class Reporter(chainer.Chain):
 
     def report(self, loss_ctc, loss_att, acc, cer_ctc, cer, wer, mtl_loss):
         """Report at every step."""
-        reporter.report({"loss_ctc": loss_ctc}, self)
-        reporter.report({"loss_att": loss_att}, self)
+        reporter.report({"loss_am": loss_ctc}, self)
+        reporter.report({"loss_pn": loss_att}, self)
         reporter.report({"acc": acc}, self)
         reporter.report({"cer_ctc": cer_ctc}, self)
         reporter.report({"cer": cer}, self)
