@@ -13,7 +13,7 @@ stop_stage=100
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 seed=1
 debugmode=1
-dumpdir='mktemp -d /scratch/ml-asr-XXXX'   # directory to dump full features
+dumpdir=
 N=0            # number of minibatches to be used (mainly for debugging). "0" uses all minibatches.
 verbose=0      # verbose option
 resume=        # Resume the training from snapshot
@@ -21,8 +21,9 @@ resume=        # Resume the training from snapshot
 # feature configuration
 do_delta=false
 
+preprocess_config=conf/specaug.yaml
 train_config=conf/train.yaml
-lm_config=conf/lm.yaml
+lm_config=lm.yaml
 decode_config=conf/decode.yaml
 
 # rnnlm related
@@ -42,8 +43,8 @@ snapshot_upper=
 # exp tag
 tag="" # tag for managing experiments.
 
-langs="105 106 107"
-recog="105 106 107"
+langs="105 106 107 302 307 402"
+recog="105 106 107 302 307 402"
 
 . utils/parse_options.sh || exit 1;
 
@@ -81,12 +82,16 @@ bpemodel=data/lang_1char/${train_set}_${bpemode}${nbpe}
 nlsyms=data/lang_1char/non_lang_syms.txt
 
 if [ -z ${tag} ]; then
-    expname=${train_set}_${backend}_$(basename ${train_config%.*})_ngpu${ngpu}
+    expname=${train_set}_${backend}_$(basename ${train_config%.*})_$(basename ${preprocess_config%.*})_ngpu${ngpu}
+    #expname=${train_set}_${backend}_$(basename ${train_config%.*})_ngpu${ngpu}
     if ${do_delta}; then
         expname=${expname}_delta
     fi
 else
-    expname=${train_set}_${backend}_${tag}
+    expname=${train_set}_${backend}_$(basename ${train_config%.*})_$(basename ${preprocess_config%.*})_ngpu${ngpu}_${tag}
+    if ${do_delta}; then
+        expname=${expname}_delta
+    fi
 fi
 expdir=exp/${expname}
 mkdir -p ${expdir}
@@ -97,6 +102,8 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
     ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
         asr_train.py \
         --config ${train_config} \
+        --n-iter-process 8 \
+        --preprocess-conf ${preprocess_config} \
         --ngpu ${ngpu} \
         --backend ${backend} \
         --outdir ${expdir}/results \
@@ -114,10 +121,10 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
 fi
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
-    echo "stage 5: Averaging Models"
+    echo "stage 4: Averaging Models"
     if [[ $(get_yaml.py ${train_config} model-module) = *transformer* ]]; then
         # Average ST models
-        recog_model=model.last${n_average}.avg.best
+        recog_model=model.last${n_average}_${snapshot_upper}.avg
         opt="--log"
         
         if ${use_snapshot_range}; then
@@ -139,20 +146,21 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
 fi
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
-    echo "stage 4: Decoding"
-    nj=20
+    echo "stage 5: Decoding"
+    nj=15
 
     #extra_opts=""
     #if ${use_lm}; then
     #  extra_opts="--rnnlm ${lmexpdir}/rnnlm.model.best ${extra_opts}"
     #fi
     
-    recog_model=model.last${n_average}.avg.best
+    recog_model=model.last${n_average}_${snapshot_upper}.avg
+    echo "${recog_model}"
 
     pids=() # initialize pids
     for rtask in ${train_dev}; do
     (
-        decode_dir=decode_${rtask}_$(basename ${decode_config%.*})
+        decode_dir=decode_${rtask}_$(basename ${decode_config%.*})_${recog_model}
         #if ${use_lm}; then
         #    decode_dir=${decode_dir}_rnnlm_${lmtag}
         #fi
@@ -175,8 +183,8 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             --model ${expdir}/results/${recog_model}  \
             #${extra_opts}
 
-        score_sclite.sh --wer true --nlsyms ${nlsyms} ${expdir}/${decode_dir} ${dict}
-
+        local/score_sclite.sh --wer true --bpe ${nbpe} --bpemodel ${bpemodel}.model --nlsyms ${nlsyms} ${expdir}/${decode_dir} ${dict}
+        local/score_sclite_ph.sh --nlsyms ${nlsyms} ${expdir}/${decode_dir}/ph
     ) &
     pids+=($!) # store background pids
     done

@@ -20,7 +20,7 @@ def get_parser():
     parser.add_argument("--non-lang-file", default=None , type=str)
     return parser
 
-epitran_code_dict = {'it':'ita-Latn' , 'de':'deu-Latn', 'fr':'fra-Latn', 'nl':'nld-Latn', 'es' : 'spa-Latn', '105' : 'tur-Latn', '106' : 'tgl-Latn', '107' : 'vie-Latn'}
+epitran_code_dict = {'it':'ita-Latn' , 'de':'deu-Latn', 'fr':'fra-Latn', 'nl':'nld-Latn', 'es' : 'spa-Latn', '105' : 'tur-Latn', '106' : 'tgl-Latn', '107' : 'vie-Latn', '302' : 'kaz-Cyrl', '307' : 'amh-Ethi-pp', '402': 'jav-Latn', '000': 'eng-Latn'}
 dictionary={}
 args = get_parser().parse_args()
 

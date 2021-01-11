@@ -551,6 +551,8 @@ def get_parser(parser=None, required=True):
         default='attn',
         help="",
     )
+    parser.add_argument("--pn-dropout-rate", type=float, default=None, help="")
+    parser.add_argument("--pn-transformer-attn-dropout-rate", type=float, default=None, help="")
     return parser
 
 

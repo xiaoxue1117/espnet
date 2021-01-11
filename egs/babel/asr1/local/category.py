@@ -19,7 +19,10 @@ def main(args, start, end):
         data = json.load(f)
 
     for u in data["utts"].keys():
-        data["utts"][u]["category"] = u[start:end]
+        if u[:2] == 'sw' or u[:2] == 'en':
+            data["utts"][u]["category"] = '000'
+        else:
+            data["utts"][u]["category"] = u[start:end]
 
     with open(args.output_json, "wb") as json_file:
         json_file.write(

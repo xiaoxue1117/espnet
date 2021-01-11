@@ -81,6 +81,10 @@ class E2E(ASRInterface, torch.nn.Module):
 
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
+        if not hasattr(args, 'pn_dropout_rate') or args.pn_dropout_rate is None:
+            args.pn_dropout_rate = args.dropout_rate
+        if not hasattr(args, 'pn_transformer_attn_dropout_rate') or args.pn_transformer_attn_dropout_rate is None:
+            args.pn_transformer_attn_dropout_rate = args.pn_dropout_rate
         # speech encoder
         self.encoder = Encoder(
             idim=idim,
@@ -174,9 +178,9 @@ class E2E(ASRInterface, torch.nn.Module):
                         linear_units=args.eunits,
                         num_blocks=args.pn_elayers,
                         input_layer=args.pn_input_layer,
-                        dropout_rate=args.dropout_rate,
-                        positional_dropout_rate=args.dropout_rate,
-                        attention_dropout_rate=args.transformer_attn_dropout_rate,
+                        dropout_rate=args.pn_dropout_rate,
+                        positional_dropout_rate=args.pn_dropout_rate,
+                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
                     )
                 self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
                 self.pn_ctc[lid] = CTC(
@@ -191,10 +195,55 @@ class E2E(ASRInterface, torch.nn.Module):
                         linear_units=args.eunits,
                         num_blocks=args.pn_elayers,
                         input_layer=args.pn_input_layer,
-                        dropout_rate=args.dropout_rate,
-                        positional_dropout_rate=args.dropout_rate,
-                        attention_dropout_rate=args.transformer_attn_dropout_rate,
+                        dropout_rate=args.pn_dropout_rate,
+                        positional_dropout_rate=args.pn_dropout_rate,
+                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
                     )
+                self.pn_dec[lid] = torch.nn.Sequential(
+                                torch.nn.Linear(args.adim, args.adim),
+                                torch.nn.Dropout(args.dropout_rate),
+                                torch.nn.Linear(args.adim, odim))
+                self.pn_ctc[lid] = CTC(
+                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+                )
+            elif args.pn_type == 'ctc4':
+                self.pn_enc[lid] = Encoder(
+                        idim=langdict['phone'],
+                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+                        attention_dim=args.adim,
+                        attention_heads=args.pn_enc_aheads,
+                        linear_units=args.eunits,
+                        num_blocks=args.pn_elayers,
+                        input_layer=args.pn_input_layer,
+                        dropout_rate=args.pn_dropout_rate,
+                        positional_dropout_rate=args.pn_dropout_rate,
+                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+                    )
+                self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
+                self.pn_ctc[lid] = CTC(
+                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+                )
+            elif args.pn_type == 'ctc5':
+                self.pn_enc[lid] = Encoder(
+                        idim=langdict['phone'],
+                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+                        attention_dim=args.adim,
+                        attention_heads=args.pn_enc_aheads,
+                        linear_units=args.eunits,
+                        num_blocks=args.pn_elayers,
+                        input_layer=args.pn_input_layer,
+                        dropout_rate=args.pn_dropout_rate,
+                        positional_dropout_rate=args.pn_dropout_rate,
+                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+                    )
+                self.pn_dec[lid] = torch.nn.Sequential(
+                                torch.nn.Linear(args.adim, args.adim),
+                                torch.nn.Dropout(args.dropout_rate),
+                                torch.nn.Linear(args.adim, odim))
+                self.pn_ctc[lid] = CTC(
+                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+                )
+            elif args.pn_type == 'ctc6':
                 self.pn_dec[lid] = torch.nn.Sequential(
                                 torch.nn.Linear(args.adim, args.adim),
                                 torch.nn.Dropout(args.dropout_rate),
@@ -237,7 +286,7 @@ class E2E(ASRInterface, torch.nn.Module):
         
         self.allotype = 'avg'
         if hasattr(args, 'allotype'):
-            self.allotype = 'max'
+            self.allotype = args.allotype #'max'
 
         if self.allotype == 'none':
             self.phoneme_out = torch.nn.ModuleDict()
@@ -300,7 +349,9 @@ class E2E(ASRInterface, torch.nn.Module):
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
         hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
-        
+        if self.pn_type == 'ctc6':
+            speech_hs_pad = hs_pad
+
         # allophone layer
         if len(set(cats)) > 1:
             logging.warning("Batch is mixed")
@@ -314,14 +365,20 @@ class E2E(ASRInterface, torch.nn.Module):
                 hs_pad = self.phoneme_out[lid](hs_pad)
             else:
                 # phone out
-                hs_pad = self.phone_out(hs_pad)
+                if self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
+                    phone_hs_pad = self.phone_out(hs_pad)
+                    hs_pad = phone_hs_pad.unsqueeze(2)
+                else:
+                    hs_pad = self.phone_out(hs_pad)
+                    hs_pad = hs_pad.unsqueeze(2)
 
-                hs_pad = hs_pad.unsqueeze(2)
                 hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
                 if self.allotype == 'max':
                     hs_pad = torch.max(hs_pad, -1)[0]
                 elif self.allotype == 'avg':
                     hs_pad = hs_pad.sum(dim=-1)/(self.alloW[lid].sum(dim=-1)+0.000001)
+                elif self.allotype == 'sum':
+                    hs_pad = hs_pad.sum(dim=-1)
 
             # am CTC
             loss_am, _ = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
@@ -357,6 +414,15 @@ class E2E(ASRInterface, torch.nn.Module):
         elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
             hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
             hs_pad = self.pn_dec[lid](hs_pad)
+            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+            self.acc = 0.0
+        elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
+            hs_pad, hs_mask = self.pn_enc[lid](phone_hs_pad, hs_mask)
+            hs_pad = self.pn_dec[lid](hs_pad)
+            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+            self.acc = 0.0
+        elif self.pn_type == 'ctc6':
+            hs_pad = self.pn_dec[lid](speech_hs_pad)
             loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
             self.acc = 0.0
         elif self.pn_type == 'directbaseline':
@@ -426,20 +492,24 @@ class E2E(ASRInterface, torch.nn.Module):
 
         logging.info("langid: %s", cat)
         out = self.encode(x).unsqueeze(0)
+        if self.pn_type == 'ctc6':
+            speech_hs = out
         if self.pn_type != 'directbaseline':
             if self.allotype == 'none':
                 out = self.phoneme_out[cat](out)
             else:
-                out = self.phone_out(out)
+                phone_hs = self.phone_out(out)
                 #get full alignment
-                n_out = out.max(dim=-1)[1].squeeze()
+                n_out = phone_hs.max(dim=-1)[1].squeeze()
                 align[0] = n_out.tolist()
-                out = out.unsqueeze(2)
+                out = phone_hs.unsqueeze(2)
                 out = out * self.alloW[cat].unsqueeze(0).unsqueeze(0)
                 if self.allotype == 'max':
                     out = torch.max(out, -1)[0]
-                else:   #avg
+                elif self.allotype == 'avg':   #avg
                     out = out.sum(dim=-1)/(self.alloW[cat].sum(dim=-1)+0.000001)
+                elif self.allotype == 'sum':   #sum
+                    out = out.sum(dim=-1)
             ph_hyps = out.max(dim=-1)[1].squeeze()
             align[1] = ph_hyps.tolist()
 
@@ -460,6 +530,35 @@ class E2E(ASRInterface, torch.nn.Module):
             from itertools import groupby
             out, _ = self.pn_enc[cat](out, None)
             out = self.pn_dec[cat](out)
+            lpz = self.pn_ctc[cat].argmax(out)
+            align[2] = lpz.squeeze().tolist()
+            collapsed_indices = [x[0] for x in groupby(lpz[0])]
+            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
+            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+            if recog_args.beam_size > 1:
+                raise NotImplementedError("Pure CTC beam search is not implemented.")
+            # TODO(hirofumi0810): Implement beam search
+            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
+            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
+            return nbest_hyps, ph_hyps, align
+        elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
+            from itertools import groupby
+            out, _ = self.pn_enc[cat](phone_hs, None)
+            out = self.pn_dec[cat](out)
+            lpz = self.pn_ctc[cat].argmax(out)
+            align[2] = lpz.squeeze().tolist()
+            collapsed_indices = [x[0] for x in groupby(lpz[0])]
+            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
+            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+            if recog_args.beam_size > 1:
+                raise NotImplementedError("Pure CTC beam search is not implemented.")
+            # TODO(hirofumi0810): Implement beam search
+            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
+            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
+            return nbest_hyps, ph_hyps, align
+        elif self.pn_type == 'ctc6':
+            from itertools import groupby
+            out = self.pn_dec[cat](speech_hs)
             lpz = self.pn_ctc[cat].argmax(out)
             align[2] = lpz.squeeze().tolist()
             collapsed_indices = [x[0] for x in groupby(lpz[0])]
