@@ -733,7 +733,6 @@ def torch_load(path, model):
         ]
     else:
         model_state_dict = torch.load(path, map_location=lambda storage, loc: storage)
-
     if hasattr(model, "module"):
         model.module.load_state_dict(model_state_dict)
     else:

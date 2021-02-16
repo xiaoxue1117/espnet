@@ -420,16 +420,24 @@ def train(args):
     for i in range(args.num_encs):
         logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
     logging.info("#output dims: " + str(odim))
-    
     import glob
     langdict = {}
     alloWdict = {}
     for f in glob.glob(args.phonemap_np+"*"):
         m = np.load(f, allow_pickle=True)
-        lang = f[-3:]
+        lang = f[(f.rfind('_') + 1):]
+        #lang = f[-3:]
         langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
         alloWdict.update({lang : m.tolist()})
-    
+
+    if args.lang_units is not None:
+        odim = {}
+        for f in glob.glob(args.lang_units+"*"):
+            with open(f, "r", encoding="utf-8") as readfile:
+                units = readfile.readlines()
+                lang = f[(f.rfind('_') + 1):]
+                odim.update({lang : len(units) + 2})
+
     #langdict = {'phone': 51, '105': 37, '106': 36, '107': 42}
 
     # specify attention, CTC, hybrid mode
@@ -574,7 +582,6 @@ def train(args):
     # FIXME: TOO DIRTY HACK
     setattr(optimizer, "target", reporter)
     setattr(optimizer, "serialize", lambda s: reporter.serialize(s))
-
     # Setup a converter
     if args.num_encs == 1:
         converter = CustomConverter(subsampling_factor=model.subsample[0], dtype=dtype)

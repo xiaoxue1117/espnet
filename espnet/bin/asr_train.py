@@ -73,7 +73,7 @@ def get_parser(parser=None, required=True):
         "--outdir", type=str, required=required, help="Output directory"
     )
     parser.add_argument("--debugmode", default=1, type=int, help="Debugmode")
-    parser.add_argument("--dict", required=required, help="Dictionary")
+    parser.add_argument("--dict", required=False, default=None, help="Dictionary")
     parser.add_argument("--seed", default=1, type=int, help="Random seed")
     parser.add_argument("--debugdir", type=str, help="Output directory for debugging")
     parser.add_argument(
@@ -540,6 +540,12 @@ def get_parser(parser=None, required=True):
         help="",
     )
     parser.add_argument(
+        "--lang-units",
+        type=str,
+        default=None,
+        help="",
+    )
+    parser.add_argument(
         "--allotype",
         type=str,
         default='max',
@@ -553,6 +559,12 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--pn-dropout-rate", type=float, default=None, help="")
     parser.add_argument("--pn-transformer-attn-dropout-rate", type=float, default=None, help="")
+    parser.add_argument(
+        "--alloW_grad",
+        type=strtobool,
+        default=False,
+        help="",
+    )
     return parser
 
 

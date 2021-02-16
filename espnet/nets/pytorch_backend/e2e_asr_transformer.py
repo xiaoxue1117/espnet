@@ -43,6 +43,7 @@ from espnet.nets.pytorch_backend.transformer.plot import PlotAttentionReport
 from espnet.nets.scorers.ctc import CTCPrefixScorer
 from espnet.utils.fill_missing_args import fill_missing_args
 
+from espnet.nets.pytorch_backend.ctc_beam_search import ctcBeamSearch
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module.
@@ -182,9 +183,9 @@ class E2E(ASRInterface, torch.nn.Module):
                         positional_dropout_rate=args.pn_dropout_rate,
                         attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
                     )
-                self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
+                self.pn_dec[lid] = torch.nn.Linear(args.adim, odim[lid])
                 self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+                    odim[lid], odim[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
                 )
             elif args.pn_type == 'ctc3':
                 self.pn_enc[lid] = Encoder(
@@ -261,13 +262,25 @@ class E2E(ASRInterface, torch.nn.Module):
                     odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
                 )
 
-
         self.criterion = LabelSmoothingLoss(
             odim,
             ignore_id,
             args.lsm_weight,
             args.transformer_length_normalized_loss,
         )
+        #self.criterion = {}
+        self.sos = {}
+        self.eos = {}
+        self.odim = odim
+        for lid in alloWdict.keys():
+            #self.criterion[lid] = LabelSmoothingLoss(
+            #    odim[lid],
+            #    ignore_id,
+            #    args.lsm_weight,
+            #    args.transformer_length_normalized_loss,
+            #)
+            self.sos[lid] = odim[lid] - 1
+            self.eos[lid] = odim[lid] - 1
         
         # phone output
         #self.phone_out = torch.nn.Sequential(
@@ -282,7 +295,10 @@ class E2E(ASRInterface, torch.nn.Module):
         self.alloW = torch.nn.ParameterDict()
         for lid in alloWdict.keys():
             self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
-            self.alloW[lid].requires_grad = False
+            if not hasattr(args, 'alloW_grad'):
+                self.alloW[lid].requires_grad = False
+            else:
+                self.alloW[lid].requires_grad = args.alloW_grad
         
         self.allotype = 'avg'
         if hasattr(args, 'allotype'):
@@ -296,9 +312,9 @@ class E2E(ASRInterface, torch.nn.Module):
                                 torch.nn.Dropout(args.dropout_rate),
                                 torch.nn.Linear(args.adim, langdict[lid]))
         self.blank = 0
-        self.sos = odim - 1
-        self.eos = odim - 1
-        self.odim = odim
+        #self.sos = odim - 1
+        #self.eos = odim - 1
+        #self.odim = odim
         self.ignore_id = ignore_id
         self.subsample = get_subsample(args, mode="asr", arch="transformer")
         self.reporter = Reporter()
@@ -414,7 +430,7 @@ class E2E(ASRInterface, torch.nn.Module):
         elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
             hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
             hs_pad = self.pn_dec[lid](hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim[lid]), hs_len, ys_pad)
             self.acc = 0.0
         elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
             hs_pad, hs_mask = self.pn_enc[lid](phone_hs_pad, hs_mask)
@@ -487,6 +503,10 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: N-best decoding results
         :rtype: list
         """
+        if cat not in self.alloW.keys():
+            if cat == 'en':
+                cat = '000'
+
         #alignments
         align = [[1], [1], [1]]
 
@@ -534,7 +554,7 @@ class E2E(ASRInterface, torch.nn.Module):
             align[2] = lpz.squeeze().tolist()
             collapsed_indices = [x[0] for x in groupby(lpz[0])]
             hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+            nbest_hyps = [{"score": 0.0, "yseq": [self.sos[cat]] + hyp}]
             if recog_args.beam_size > 1:
                 raise NotImplementedError("Pure CTC beam search is not implemented.")
             # TODO(hirofumi0810): Implement beam search
@@ -547,15 +567,21 @@ class E2E(ASRInterface, torch.nn.Module):
             out = self.pn_dec[cat](out)
             lpz = self.pn_ctc[cat].argmax(out)
             align[2] = lpz.squeeze().tolist()
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
+            mat = self.pn_ctc[cat].softmax(out)
+            hyp = ctcBeamSearch(mat.squeeze().numpy())
+            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + list(hyp)}]
+            
+            #collapsed_indices = [x[0] for x in groupby(lpz[0])]
+            #hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
+            #nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+            #if recog_args.beam_size > 1:
+            #    raise NotImplementedError("Pure CTC beam search is not implemented.")
+            ## TODO(hirofumi0810): Implement beam search
             collapsed_indices = [x[0] for x in groupby(ph_hyps)]
             ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
+
             return nbest_hyps, ph_hyps, align
+            #return nbest_hyps, ph_hyps, align, beam_hyp
         elif self.pn_type == 'ctc6':
             from itertools import groupby
             out = self.pn_dec[cat](speech_hs)

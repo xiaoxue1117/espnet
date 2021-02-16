@@ -201,9 +201,8 @@ if __name__ == "__main__":
                         if line != first:
                             concat = sum(input_infos + output_infos + infos, [])
                             raise RuntimeError(
-                                "The number of lines mismatch "
-                                'between: "{}" and "{}"'.format(
-                                    concat[0][1], concat[count][1]
+                                "The number of lines mismatch between: {} and {}, {}".format(
+                                    concat[0][1], concat[count][1], line
                                 )
                             )
 
