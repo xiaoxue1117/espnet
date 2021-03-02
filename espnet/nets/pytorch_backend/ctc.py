@@ -40,10 +40,16 @@ class CTC(torch.nn.Module):
             import warpctc_pytorch as warp_ctc
 
             self.ctc_loss = warp_ctc.CTCLoss(size_average=True, reduce=reduce)
+        elif self.ctc_type == "gtnctc":
+            from espnet.nets.pytorch_backend.gtn_ctc import GTNCTCLossFunction
+
+            self.ctc_loss = GTNCTCLossFunction.apply
         else:
-            raise ValueError(
-                'ctc_type must be "builtin" or "warpctc": {}'.format(self.ctc_type)
-            )
+            from espnet.nets.pytorch_backend.gtn_ctc import GTNCTCLossFunction
+            self.ctc_loss = GTNCTCLossFunction.apply
+            #raise ValueError(
+            #    'ctc_type must be "builtin" or "warpctc": {}'.format(self.ctc_type)
+            #)
 
         self.ignore_id = -1
         self.reduce = reduce
@@ -60,6 +66,10 @@ class CTC(torch.nn.Module):
             return loss
         elif self.ctc_type == "warpctc":
             return self.ctc_loss(th_pred, th_target, th_ilen, th_olen)
+        elif self.ctc_type == "gtnctc":
+            targets = [t.tolist() for t in th_target]
+            log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
+            return self.ctc_loss(log_probs, targets, 0, "none")
         else:
             raise NotImplementedError
 

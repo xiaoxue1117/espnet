@@ -534,6 +534,12 @@ def get_parser(parser=None, required=True):
         help="",
         )
     parser.add_argument(
+        "--phonegraph",
+        type=str,
+        default=None,
+        help="",
+    )
+    parser.add_argument(
         "--phonemap-np",
         type=str,
         default=None,

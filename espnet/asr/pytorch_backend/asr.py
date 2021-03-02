@@ -21,6 +21,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 import torch
 from torch.nn.parallel import data_parallel
+import gtn
 
 from espnet.asr.asr_utils import adadelta_eps_decay
 from espnet.asr.asr_utils import add_results_to_json
@@ -214,6 +215,7 @@ class CustomUpdater(StandardUpdater):
             with amp.scale_loss(loss, opt) as scaled_loss:
                 scaled_loss.backward()
         else:
+            #import pdb; pdb.set_trace()
             loss.backward()
         # gradient noise injection
         if self.grad_noise:
@@ -236,7 +238,9 @@ class CustomUpdater(StandardUpdater):
         if math.isnan(grad_norm):
             logging.warning("grad norm is nan. Do not update model.")
         else:
+            #import pdb; pdb.set_trace()
             optimizer.step()
+            logging.warning(self.model.alloW['000'])
         optimizer.zero_grad()
 
     def update(self):
@@ -423,13 +427,21 @@ def train(args):
     import glob
     langdict = {}
     alloWdict = {}
-    for f in glob.glob(args.phonemap_np+"*"):
+    for f in glob.glob(args.phonemap_np+"*"): 
         m = np.load(f, allow_pickle=True)
         lang = f[(f.rfind('_') + 1):]
-        #lang = f[-3:]
         langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
-        alloWdict.update({lang : m.tolist()})
 
+    for f in glob.glob(args.phonegraph+"*.txt"):
+        lang = f[(f.rfind('_') + 1):-4]
+        #langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
+        alloWdict.update({lang : f})
+    #for f in glob.glob(args.phonemap_np+"*"):
+    #    m = np.load(f, allow_pickle=True)
+    #    lang = f[(f.rfind('_') + 1):]
+    #    #lang = f[-3:]
+    #    langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
+    #    alloWdict.update({lang : m.tolist()})
     if args.lang_units is not None:
         odim = {}
         for f in glob.glob(args.lang_units+"*"):
@@ -437,6 +449,9 @@ def train(args):
                 units = readfile.readlines()
                 lang = f[(f.rfind('_') + 1):]
                 odim.update({lang : len(units) + 2})
+    else:
+        odim = {lid : odim for lid in alloWdict.keys()}
+
 
     #langdict = {'phone': 51, '105': 37, '106': 36, '107': 42}
 

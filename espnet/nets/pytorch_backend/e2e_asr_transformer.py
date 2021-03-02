@@ -9,6 +9,7 @@ import math
 
 import numpy
 import torch
+import gtn
 
 from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.ctc_prefix_score import CTCPrefixScore
@@ -44,6 +45,8 @@ from espnet.nets.scorers.ctc import CTCPrefixScorer
 from espnet.utils.fill_missing_args import fill_missing_args
 
 from espnet.nets.pytorch_backend.ctc_beam_search import ctcBeamSearch
+
+from espnet.nets.pytorch_backend.allo import AlloLayer
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module.
@@ -268,37 +271,32 @@ class E2E(ASRInterface, torch.nn.Module):
             args.lsm_weight,
             args.transformer_length_normalized_loss,
         )
-        #self.criterion = {}
         self.sos = {}
         self.eos = {}
         self.odim = odim
         for lid in alloWdict.keys():
-            #self.criterion[lid] = LabelSmoothingLoss(
-            #    odim[lid],
-            #    ignore_id,
-            #    args.lsm_weight,
-            #    args.transformer_length_normalized_loss,
-            #)
             self.sos[lid] = odim[lid] - 1
             self.eos[lid] = odim[lid] - 1
         
         # phone output
-        #self.phone_out = torch.nn.Sequential(
-        #                        torch.nn.Linear(args.adim, langdict['phone']),
-        #                        torch.nn.Dropout(args.dropout_rate))
         self.phone_out = torch.nn.Sequential(
                                 torch.nn.Linear(args.adim, args.adim),
                                 torch.nn.Dropout(args.dropout_rate),
                                 torch.nn.Linear(args.adim, langdict['phone']))
 
         # allophone layer
+        #self.alloW = torch.nn.ParameterDict()
         self.alloW = torch.nn.ParameterDict()
+        self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
-            self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
-            if not hasattr(args, 'alloW_grad'):
-                self.alloW[lid].requires_grad = False
-            else:
-                self.alloW[lid].requires_grad = args.alloW_grad
+            #self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
+            self.allodict[lid] = AlloLayer(alloWdict[lid])
+            alloG = gtn.loadtxt(alloWdict[lid])
+            self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloG.weights_to_numpy()))
+            #if not hasattr(args, 'alloW_grad'):
+                #self.alloW[lid].requires_grad = False
+            #else:
+                #self.alloW[lid].requires_grad = args.alloW_grad
         
         self.allotype = 'avg'
         if hasattr(args, 'allotype'):
@@ -361,12 +359,14 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: accuracy in attention decoder
         :rtype: float
         """
+        # emissions graph
+
         # 1. forward encoder
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
         hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
-        if self.pn_type == 'ctc6':
-            speech_hs_pad = hs_pad
+        #if self.pn_type == 'ctc6':
+        #    speech_hs_pad = hs_pad
 
         # allophone layer
         if len(set(cats)) > 1:
@@ -381,23 +381,28 @@ class E2E(ASRInterface, torch.nn.Module):
                 hs_pad = self.phoneme_out[lid](hs_pad)
             else:
                 # phone out
-                if self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
-                    phone_hs_pad = self.phone_out(hs_pad)
-                    hs_pad = phone_hs_pad.unsqueeze(2)
-                else:
-                    hs_pad = self.phone_out(hs_pad)
-                    hs_pad = hs_pad.unsqueeze(2)
+                #if self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
+                #    phone_hs_pad = self.phone_out(hs_pad)
+                #    hs_pad = phone_hs_pad.unsqueeze(2)
+                #else:
+                hs_pad = self.phone_out(hs_pad)
+                #hs_pad = hs_pad.unsqueeze(2)
 
-                hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
-                if self.allotype == 'max':
-                    hs_pad = torch.max(hs_pad, -1)[0]
-                elif self.allotype == 'avg':
-                    hs_pad = hs_pad.sum(dim=-1)/(self.alloW[lid].sum(dim=-1)+0.000001)
-                elif self.allotype == 'sum':
-                    hs_pad = hs_pad.sum(dim=-1)
+                # TODO: change this to graph
+                #hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
+                #if self.allotype == 'max':
+                #    hs_pad = torch.max(hs_pad, -1)[0]
+                #elif self.allotype == 'avg':
+                #    hs_pad = hs_pad.sum(dim=-1)/(self.alloW[lid].sum(dim=-1)+0.000001)
+                #elif self.allotype == 'sum':
+                #    hs_pad = hs_pad.sum(dim=-1)
 
             # am CTC
-            loss_am, _ = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
+            loss_am = self.allodict[lid](self.alloW[lid], hs_pad, hs_len, ys_ph_pad)    #hs_pad = phoneme_emissions
+            #self.alloG[lid].set_weights(self.alloW[lid].data.cpu().contiguous())
+            #loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
+            #import pdb; pdb.set_trace()
+            #loss_am, _ = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
             cer_ctc = None
             if not self.training and self.error_calculator is not None:
                 ys_ph_hat = self.ctc[lid].argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
@@ -405,46 +410,46 @@ class E2E(ASRInterface, torch.nn.Module):
             # for visualization
             if not self.training:
                 self.ctc[lid].softmax(hs_pad)
-        
+
         # Pronunciation
-        if self.pn_type == 'attn':
-            if self.pn_elayers == 0:
-                hs_pad = self.pn_enc[lid](hs_pad)
-            else:
-                hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
-            
-            ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
-            ys_mask = target_mask(ys_in_pad, self.ignore_id)
-            pred_pad, pred_mask = self.pn_dec[lid](ys_in_pad, ys_mask, hs_pad, hs_mask)
-            self.pred_pad = pred_pad
-            
-            loss_pn = self.criterion(pred_pad, ys_out_pad)
-            self.acc = th_accuracy(
-                pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
-            )
-        elif self.pn_type == 'ctc':
-            # CTC
-            hs_pad = self.pn_dec[lid](hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-            self.acc = 0.0
-        elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
-            hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
-            hs_pad = self.pn_dec[lid](hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim[lid]), hs_len, ys_pad)
-            self.acc = 0.0
-        elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
-            hs_pad, hs_mask = self.pn_enc[lid](phone_hs_pad, hs_mask)
-            hs_pad = self.pn_dec[lid](hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-            self.acc = 0.0
-        elif self.pn_type == 'ctc6':
-            hs_pad = self.pn_dec[lid](speech_hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-            self.acc = 0.0
-        elif self.pn_type == 'directbaseline':
-            hs_pad = self.pn_dec[lid](hs_pad)
-            loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-            self.acc = 0.0
+        #if self.pn_type == 'attn':
+        #    if self.pn_elayers == 0:
+        #        hs_pad = self.pn_enc[lid](hs_pad)
+        #    else:
+        #        hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
+        #
+        #    ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
+        #    ys_mask = target_mask(ys_in_pad, self.ignore_id)
+        #    pred_pad, pred_mask = self.pn_dec[lid](ys_in_pad, ys_mask, hs_pad, hs_mask)
+        #    self.pred_pad = pred_pad
+        #
+        #    loss_pn = self.criterion(pred_pad, ys_out_pad)
+        #    self.acc = th_accuracy(
+        #        pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
+        #    )
+        #elif self.pn_type == 'ctc':
+        #    # CTC
+        #    hs_pad = self.pn_dec[lid](hs_pad)
+        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+        #    self.acc = 0.0
+        #elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
+        #    hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
+        #    hs_pad = self.pn_dec[lid](hs_pad)
+        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim[lid]), hs_len, ys_pad)
+        #    self.acc = 0.0
+        #elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
+        #    hs_pad, hs_mask = self.pn_enc[lid](phone_hs_pad, hs_mask)
+        #    hs_pad = self.pn_dec[lid](hs_pad)
+        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+        #    self.acc = 0.0
+        #elif self.pn_type == 'ctc6':
+        #    hs_pad = self.pn_dec[lid](speech_hs_pad)
+        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+        #    self.acc = 0.0
+        #elif self.pn_type == 'directbaseline':
+        #    hs_pad = self.pn_dec[lid](hs_pad)
+        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
+        #    self.acc = 0.0
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None or self.decoder is None:
@@ -463,6 +468,7 @@ class E2E(ASRInterface, torch.nn.Module):
             self.loss = loss_am
             loss_pn_data = None
             loss_am_data = float(loss_am)
+            self.acc = 0
         else:
             self.loss = alpha * loss_am + (1 - alpha) * loss_pn
             loss_pn_data = float(loss_pn)
