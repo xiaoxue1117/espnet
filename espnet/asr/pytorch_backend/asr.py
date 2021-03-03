@@ -240,7 +240,6 @@ class CustomUpdater(StandardUpdater):
         else:
             #import pdb; pdb.set_trace()
             optimizer.step()
-            logging.warning(self.model.alloW['000'])
         optimizer.zero_grad()
 
     def update(self):

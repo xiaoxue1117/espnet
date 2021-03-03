@@ -290,9 +290,9 @@ class E2E(ASRInterface, torch.nn.Module):
         self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
             #self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
-            self.allodict[lid] = AlloLayer(alloWdict[lid])
-            alloG = gtn.loadtxt(alloWdict[lid])
-            self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloG.weights_to_numpy()))
+            self.allodict[lid] = AlloLayer(alloWdict[lid], langdict[lid])
+            #alloG = gtn.loadtxt(alloWdict[lid])
+            #self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloG.weights_to_numpy()))
             #if not hasattr(args, 'alloW_grad'):
                 #self.alloW[lid].requires_grad = False
             #else:
@@ -398,7 +398,11 @@ class E2E(ASRInterface, torch.nn.Module):
                 #    hs_pad = hs_pad.sum(dim=-1)
 
             # am CTC
-            loss_am = self.allodict[lid](self.alloW[lid], hs_pad, hs_len, ys_ph_pad)    #hs_pad = phoneme_emissions
+            #loss_am = self.allodict[lid](self.alloW[lid], hs_pad, hs_len, ys_ph_pad)    #hs_pad = phoneme_emissions
+            hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
+            loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
+            
+            
             #self.alloG[lid].set_weights(self.alloW[lid].data.cpu().contiguous())
             #loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
             #import pdb; pdb.set_trace()
