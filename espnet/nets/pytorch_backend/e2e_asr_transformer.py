@@ -71,7 +71,7 @@ class E2E(ASRInterface, torch.nn.Module):
         """Return PlotAttentionReport."""
         return PlotAttentionReport
 
-    def __init__(self, idim, odim, langdict, alloWdict, args, ignore_id=-1):
+    def __init__(self, idim, odim, langdict, allo, args, ignore_id=-1):
         """Construct an E2E object.
 
         :param int idim: dimension of inputs
@@ -89,6 +89,9 @@ class E2E(ASRInterface, torch.nn.Module):
             args.pn_dropout_rate = args.dropout_rate
         if not hasattr(args, 'pn_transformer_attn_dropout_rate') or args.pn_transformer_attn_dropout_rate is None:
             args.pn_transformer_attn_dropout_rate = args.pn_dropout_rate
+
+        alloWdict, alloGdict = allo
+
         # speech encoder
         self.encoder = Encoder(
             idim=idim,
@@ -109,175 +112,177 @@ class E2E(ASRInterface, torch.nn.Module):
         self.criterion = None
 
         self.langdict = langdict
-        # pronunciation models
-        self.pn_enc = torch.nn.ModuleDict()
-        self.pn_dec = torch.nn.ModuleDict()
-        self.pn_ctc = torch.nn.ModuleDict()
-        self.pn_type = 'attn'
-        if hasattr(args, 'pn_type'):
-            self.pn_type = args.pn_type
-        for lid in alloWdict.keys():
-            if hasattr(args, 'pn_type') and args.pn_type == 'attn':
-                self.pn_elayers = args.pn_elayers
-                if args.pn_elayers == 0:
-                    self.pn_enc[lid] = torch.nn.Sequential(
-                                torch.nn.Linear(langdict[lid], args.adim),
-                                torch.nn.Dropout(args.dropout_rate))
-                    self.pn_dec[lid] = Decoder(
-                            odim=odim,
-                            embed_dim=langdict[lid],
-                            selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
-                            attention_dim=args.adim,
-                            attention_heads=args.aheads,
-                            conv_wshare=args.wshare,
-                            conv_kernel_length=args.ldconv_decoder_kernel_length,
-                            conv_usebias=args.ldconv_usebias,
-                            linear_units=args.dunits,
-                            num_blocks=args.dlayers,
-                            dropout_rate=args.dropout_rate,
-                            positional_dropout_rate=args.dropout_rate,
-                            self_attention_dropout_rate=args.transformer_attn_dropout_rate,
-                            src_attention_dropout_rate=args.transformer_attn_dropout_rate,
-                        )
-                else:
-                    self.pn_enc[lid] = Encoder(
-                            idim=langdict[lid],
-                            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-                            attention_dim=args.adim,
-                            attention_heads=args.pn_enc_aheads,
-                            linear_units=args.eunits,
-                            num_blocks=args.pn_elayers,
-                            input_layer=args.pn_input_layer,
-                            dropout_rate=args.dropout_rate,
-                            positional_dropout_rate=args.dropout_rate,
-                            attention_dropout_rate=args.transformer_attn_dropout_rate,
-                        )
-                    self.pn_dec[lid] = Decoder(
-                            odim=odim,
-                            selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
-                            attention_dim=args.adim,
-                            attention_heads=args.aheads,
-                            conv_wshare=args.wshare,
-                            conv_kernel_length=args.ldconv_decoder_kernel_length,
-                            conv_usebias=args.ldconv_usebias,
-                            linear_units=args.dunits,
-                            num_blocks=args.dlayers,
-                            dropout_rate=args.dropout_rate,
-                            positional_dropout_rate=args.dropout_rate,
-                            self_attention_dropout_rate=args.transformer_attn_dropout_rate,
-                            src_attention_dropout_rate=args.transformer_attn_dropout_rate,
-                        )
-            elif args.pn_type == 'ctc':
-                self.pn_enc[lid] = None
-                self.pn_dec[lid] = torch.nn.Linear(langdict[lid], odim)
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'ctc2':
-                self.pn_enc[lid] = Encoder(
-                        idim=langdict[lid],
-                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-                        attention_dim=args.adim,
-                        attention_heads=args.pn_enc_aheads,
-                        linear_units=args.eunits,
-                        num_blocks=args.pn_elayers,
-                        input_layer=args.pn_input_layer,
-                        dropout_rate=args.pn_dropout_rate,
-                        positional_dropout_rate=args.pn_dropout_rate,
-                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-                    )
-                self.pn_dec[lid] = torch.nn.Linear(args.adim, odim[lid])
-                self.pn_ctc[lid] = CTC(
-                    odim[lid], odim[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'ctc3':
-                self.pn_enc[lid] = Encoder(
-                        idim=langdict[lid],
-                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-                        attention_dim=args.adim,
-                        attention_heads=args.pn_enc_aheads,
-                        linear_units=args.eunits,
-                        num_blocks=args.pn_elayers,
-                        input_layer=args.pn_input_layer,
-                        dropout_rate=args.pn_dropout_rate,
-                        positional_dropout_rate=args.pn_dropout_rate,
-                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-                    )
-                self.pn_dec[lid] = torch.nn.Sequential(
-                                torch.nn.Linear(args.adim, args.adim),
-                                torch.nn.Dropout(args.dropout_rate),
-                                torch.nn.Linear(args.adim, odim))
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'ctc4':
-                self.pn_enc[lid] = Encoder(
-                        idim=langdict['phone'],
-                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-                        attention_dim=args.adim,
-                        attention_heads=args.pn_enc_aheads,
-                        linear_units=args.eunits,
-                        num_blocks=args.pn_elayers,
-                        input_layer=args.pn_input_layer,
-                        dropout_rate=args.pn_dropout_rate,
-                        positional_dropout_rate=args.pn_dropout_rate,
-                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-                    )
-                self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'ctc5':
-                self.pn_enc[lid] = Encoder(
-                        idim=langdict['phone'],
-                        selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-                        attention_dim=args.adim,
-                        attention_heads=args.pn_enc_aheads,
-                        linear_units=args.eunits,
-                        num_blocks=args.pn_elayers,
-                        input_layer=args.pn_input_layer,
-                        dropout_rate=args.pn_dropout_rate,
-                        positional_dropout_rate=args.pn_dropout_rate,
-                        attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-                    )
-                self.pn_dec[lid] = torch.nn.Sequential(
-                                torch.nn.Linear(args.adim, args.adim),
-                                torch.nn.Dropout(args.dropout_rate),
-                                torch.nn.Linear(args.adim, odim))
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'ctc6':
-                self.pn_dec[lid] = torch.nn.Sequential(
-                                torch.nn.Linear(args.adim, args.adim),
-                                torch.nn.Dropout(args.dropout_rate),
-                                torch.nn.Linear(args.adim, odim))
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
-            elif args.pn_type == 'directbaseline':
-                self.pn_enc[lid] = None
-                self.pn_dec[lid] = torch.nn.Sequential(
-                                torch.nn.Linear(args.adim, args.adim),
-                                torch.nn.Dropout(args.dropout_rate),
-                                torch.nn.Linear(args.adim, odim))
-                self.pn_ctc[lid] = CTC(
-                    odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-                )
 
-        self.criterion = LabelSmoothingLoss(
-            odim,
-            ignore_id,
-            args.lsm_weight,
-            args.transformer_length_normalized_loss,
-        )
+        ## pronunciation models
+        #self.pn_enc = torch.nn.ModuleDict()
+        #self.pn_dec = torch.nn.ModuleDict()
+        #self.pn_ctc = torch.nn.ModuleDict()
+        #self.pn_type = 'attn'
+        #if hasattr(args, 'pn_type'):
+        #    self.pn_type = args.pn_type
+        #for lid in alloWdict.keys():
+        #    if hasattr(args, 'pn_type') and args.pn_type == 'attn':
+        #        self.pn_elayers = args.pn_elayers
+        #        if args.pn_elayers == 0:
+        #            self.pn_enc[lid] = torch.nn.Sequential(
+        #                        torch.nn.Linear(langdict[lid], args.adim),
+        #                        torch.nn.Dropout(args.dropout_rate))
+        #            self.pn_dec[lid] = Decoder(
+        #                    odim=odim,
+        #                    embed_dim=langdict[lid],
+        #                    selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
+        #                    attention_dim=args.adim,
+        #                    attention_heads=args.aheads,
+        #                    conv_wshare=args.wshare,
+        #                    conv_kernel_length=args.ldconv_decoder_kernel_length,
+        #                    conv_usebias=args.ldconv_usebias,
+        #                    linear_units=args.dunits,
+        #                    num_blocks=args.dlayers,
+        #                    dropout_rate=args.dropout_rate,
+        #                    positional_dropout_rate=args.dropout_rate,
+        #                    self_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #                    src_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #                )
+        #        else:
+        #            self.pn_enc[lid] = Encoder(
+        #                    idim=langdict[lid],
+        #                    selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+        #                    attention_dim=args.adim,
+        #                    attention_heads=args.pn_enc_aheads,
+        #                    linear_units=args.eunits,
+        #                    num_blocks=args.pn_elayers,
+        #                    input_layer=args.pn_input_layer,
+        #                    dropout_rate=args.dropout_rate,
+        #                    positional_dropout_rate=args.dropout_rate,
+        #                    attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #                )
+        #            self.pn_dec[lid] = Decoder(
+        #                    odim=odim,
+        #                    selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
+        #                    attention_dim=args.adim,
+        #                    attention_heads=args.aheads,
+        #                    conv_wshare=args.wshare,
+        #                    conv_kernel_length=args.ldconv_decoder_kernel_length,
+        #                    conv_usebias=args.ldconv_usebias,
+        #                    linear_units=args.dunits,
+        #                    num_blocks=args.dlayers,
+        #                    dropout_rate=args.dropout_rate,
+        #                    positional_dropout_rate=args.dropout_rate,
+        #                    self_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #                    src_attention_dropout_rate=args.transformer_attn_dropout_rate,
+        #                )
+        #    elif args.pn_type == 'ctc':
+        #        self.pn_enc[lid] = None
+        #        self.pn_dec[lid] = torch.nn.Linear(langdict[lid], odim)
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'ctc2':
+        #        self.pn_enc[lid] = Encoder(
+        #                idim=langdict[lid],
+        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+        #                attention_dim=args.adim,
+        #                attention_heads=args.pn_enc_aheads,
+        #                linear_units=args.eunits,
+        #                num_blocks=args.pn_elayers,
+        #                input_layer=args.pn_input_layer,
+        #                dropout_rate=args.pn_dropout_rate,
+        #                positional_dropout_rate=args.pn_dropout_rate,
+        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+        #            )
+        #        self.pn_dec[lid] = torch.nn.Linear(args.adim, odim[lid])
+        #        self.pn_ctc[lid] = CTC(
+        #            odim[lid], odim[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'ctc3':
+        #        self.pn_enc[lid] = Encoder(
+        #                idim=langdict[lid],
+        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+        #                attention_dim=args.adim,
+        #                attention_heads=args.pn_enc_aheads,
+        #                linear_units=args.eunits,
+        #                num_blocks=args.pn_elayers,
+        #                input_layer=args.pn_input_layer,
+        #                dropout_rate=args.pn_dropout_rate,
+        #                positional_dropout_rate=args.pn_dropout_rate,
+        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+        #            )
+        #        self.pn_dec[lid] = torch.nn.Sequential(
+        #                        torch.nn.Linear(args.adim, args.adim),
+        #                        torch.nn.Dropout(args.dropout_rate),
+        #                        torch.nn.Linear(args.adim, odim))
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'ctc4':
+        #        self.pn_enc[lid] = Encoder(
+        #                idim=langdict['phone'],
+        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+        #                attention_dim=args.adim,
+        #                attention_heads=args.pn_enc_aheads,
+        #                linear_units=args.eunits,
+        #                num_blocks=args.pn_elayers,
+        #                input_layer=args.pn_input_layer,
+        #                dropout_rate=args.pn_dropout_rate,
+        #                positional_dropout_rate=args.pn_dropout_rate,
+        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+        #            )
+        #        self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'ctc5':
+        #        self.pn_enc[lid] = Encoder(
+        #                idim=langdict['phone'],
+        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+        #                attention_dim=args.adim,
+        #                attention_heads=args.pn_enc_aheads,
+        #                linear_units=args.eunits,
+        #                num_blocks=args.pn_elayers,
+        #                input_layer=args.pn_input_layer,
+        #                dropout_rate=args.pn_dropout_rate,
+        #                positional_dropout_rate=args.pn_dropout_rate,
+        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
+        #            )
+        #        self.pn_dec[lid] = torch.nn.Sequential(
+        #                        torch.nn.Linear(args.adim, args.adim),
+        #                        torch.nn.Dropout(args.dropout_rate),
+        #                        torch.nn.Linear(args.adim, odim))
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'ctc6':
+        #        self.pn_dec[lid] = torch.nn.Sequential(
+        #                        torch.nn.Linear(args.adim, args.adim),
+        #                        torch.nn.Dropout(args.dropout_rate),
+        #                        torch.nn.Linear(args.adim, odim))
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+        #    elif args.pn_type == 'directbaseline':
+        #        self.pn_enc[lid] = None
+        #        self.pn_dec[lid] = torch.nn.Sequential(
+        #                        torch.nn.Linear(args.adim, args.adim),
+        #                        torch.nn.Dropout(args.dropout_rate),
+        #                        torch.nn.Linear(args.adim, odim))
+        #        self.pn_ctc[lid] = CTC(
+        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
+        #        )
+
+        #self.criterion = LabelSmoothingLoss(
+        #    odim,
+        #    ignore_id,
+        #    args.lsm_weight,
+        #    args.transformer_length_normalized_loss,
+        #)
+
         self.sos = {}
         self.eos = {}
         self.odim = odim
         for lid in alloWdict.keys():
             self.sos[lid] = odim[lid] - 1
             self.eos[lid] = odim[lid] - 1
-        
+
         # phone output
         self.phone_out = torch.nn.Sequential(
                                 torch.nn.Linear(args.adim, args.adim),
@@ -285,19 +290,23 @@ class E2E(ASRInterface, torch.nn.Module):
                                 torch.nn.Linear(args.adim, langdict['phone']))
 
         # allophone layer
-        #self.alloW = torch.nn.ParameterDict()
+        if hasattr(args, 'am_type'):
+            self.am_type = args.am_type
+        else:
+            self.am_type = "graph"
+
         self.alloW = torch.nn.ParameterDict()
         self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
-            #self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
-            self.allodict[lid] = AlloLayer(alloWdict[lid], langdict[lid])
-            #alloG = gtn.loadtxt(alloWdict[lid])
-            #self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloG.weights_to_numpy()))
-            #if not hasattr(args, 'alloW_grad'):
-                #self.alloW[lid].requires_grad = False
-            #else:
-                #self.alloW[lid].requires_grad = args.alloW_grad
-        
+            if self.am_type != "allomatbaseline":
+                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid])
+            else:
+                self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
+                if not hasattr(args, 'alloW_grad'):
+                    self.alloW[lid].requires_grad = False
+                else:
+                    self.alloW[lid].requires_grad = args.alloW_grad
+
         self.allotype = 'avg'
         if hasattr(args, 'allotype'):
             self.allotype = args.allotype #'max'
@@ -310,9 +319,6 @@ class E2E(ASRInterface, torch.nn.Module):
                                 torch.nn.Dropout(args.dropout_rate),
                                 torch.nn.Linear(args.adim, langdict[lid]))
         self.blank = 0
-        #self.sos = odim - 1
-        #self.eos = odim - 1
-        #self.odim = odim
         self.ignore_id = ignore_id
         self.subsample = get_subsample(args, mode="asr", arch="transformer")
         self.reporter = Reporter()
@@ -320,14 +326,12 @@ class E2E(ASRInterface, torch.nn.Module):
         self.reset_parameters(args)
         self.adim = args.adim  # used for CTC (equal to d_model)
         self.mtlalpha = args.mtlalpha
-        #if args.mtlalpha > 0.0:
+
         self.ctc = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
             self.ctc[lid] = CTC(
                 langdict[lid], langdict[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
             )
-        #else:
-        #    self.ctc = None 
 
         if args.report_cer or args.report_wer:
             self.error_calculator = ErrorCalculator(
@@ -359,16 +363,12 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: accuracy in attention decoder
         :rtype: float
         """
-        # emissions graph
-
         # 1. forward encoder
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
         hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
-        #if self.pn_type == 'ctc6':
-        #    speech_hs_pad = hs_pad
 
-        # allophone layer
+        # setup batch
         if len(set(cats)) > 1:
             logging.warning("Batch is mixed")
             logging.warning(cats)
@@ -376,84 +376,27 @@ class E2E(ASRInterface, torch.nn.Module):
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
 
-        if self.pn_type != 'directbaseline':
-            if self.allotype == 'none':
-                hs_pad = self.phoneme_out[lid](hs_pad)
-            else:
-                # phone out
-                #if self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
-                #    phone_hs_pad = self.phone_out(hs_pad)
-                #    hs_pad = phone_hs_pad.unsqueeze(2)
-                #else:
-                hs_pad = self.phone_out(hs_pad)
-                #hs_pad = hs_pad.unsqueeze(2)
+        # phone logits
+        hs_pad = self.phone_out(hs_pad)
 
-                # TODO: change this to graph
-                #hs_pad = hs_pad * self.alloW[lid].unsqueeze(0).unsqueeze(0)
-                #if self.allotype == 'max':
-                #    hs_pad = torch.max(hs_pad, -1)[0]
-                #elif self.allotype == 'avg':
-                #    hs_pad = hs_pad.sum(dim=-1)/(self.alloW[lid].sum(dim=-1)+0.000001)
-                #elif self.allotype == 'sum':
-                #    hs_pad = hs_pad.sum(dim=-1)
-
+        if self.am_type != 'allomatbaseline':
             # am CTC
-            #loss_am = self.allodict[lid](self.alloW[lid], hs_pad, hs_len, ys_ph_pad)    #hs_pad = phoneme_emissions
             hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
-            loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
-            
-            
-            #self.alloG[lid].set_weights(self.alloW[lid].data.cpu().contiguous())
-            #loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
-            #import pdb; pdb.set_trace()
-            #loss_am, _ = self.ctc[lid](hs_pad.view(batch_size, -1, self.langdict[lid]), hs_len, ys_ph_pad)
-            cer_ctc = None
-            if not self.training and self.error_calculator is not None:
-                ys_ph_hat = self.ctc[lid].argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
-                cer_ctc = self.error_calculator(ys_ph_hat.cpu(), ys_ph_pad.cpu(), is_ctc=True)
-            # for visualization
-            if not self.training:
-                self.ctc[lid].softmax(hs_pad)
+        else:
+            hs_pad = hs_pad.unsqueeze(2) * self.alloW[lid].unsqueeze(0).unsqueeze(0)
+            hs_pad = hs_pad.sum(dim=-1)
+            hs_pad = hs_pad.log_softmax(dim=-1)
 
-        # Pronunciation
-        #if self.pn_type == 'attn':
-        #    if self.pn_elayers == 0:
-        #        hs_pad = self.pn_enc[lid](hs_pad)
-        #    else:
-        #        hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
-        #
-        #    ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
-        #    ys_mask = target_mask(ys_in_pad, self.ignore_id)
-        #    pred_pad, pred_mask = self.pn_dec[lid](ys_in_pad, ys_mask, hs_pad, hs_mask)
-        #    self.pred_pad = pred_pad
-        #
-        #    loss_pn = self.criterion(pred_pad, ys_out_pad)
-        #    self.acc = th_accuracy(
-        #        pred_pad.view(-1, self.odim), ys_out_pad, ignore_label=self.ignore_id
-        #    )
-        #elif self.pn_type == 'ctc':
-        #    # CTC
-        #    hs_pad = self.pn_dec[lid](hs_pad)
-        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-        #    self.acc = 0.0
-        #elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
-        #    hs_pad, hs_mask = self.pn_enc[lid](hs_pad, hs_mask)
-        #    hs_pad = self.pn_dec[lid](hs_pad)
-        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim[lid]), hs_len, ys_pad)
-        #    self.acc = 0.0
-        #elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
-        #    hs_pad, hs_mask = self.pn_enc[lid](phone_hs_pad, hs_mask)
-        #    hs_pad = self.pn_dec[lid](hs_pad)
-        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-        #    self.acc = 0.0
-        #elif self.pn_type == 'ctc6':
-        #    hs_pad = self.pn_dec[lid](speech_hs_pad)
-        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-        #    self.acc = 0.0
-        #elif self.pn_type == 'directbaseline':
-        #    hs_pad = self.pn_dec[lid](hs_pad)
-        #    loss_pn, _ = self.pn_ctc[lid](hs_pad.view(batch_size, -1, self.odim), hs_len, ys_pad)
-        #    self.acc = 0.0
+        # input is hs_pad which is already log_sm
+        loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
+
+        cer_ctc = None
+        if not self.training and self.error_calculator is not None:
+            ys_ph_hat = self.ctc[lid].argmax(hs_pad.view(batch_size, -1, self.langdict[lid])).data
+            cer_ctc = self.error_calculator(ys_ph_hat.cpu(), ys_ph_pad.cpu(), is_ctc=True)
+        # for visualization
+        if not self.training:
+            self.ctc[lid].softmax(hs_pad)
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None or self.decoder is None:
@@ -546,7 +489,7 @@ class E2E(ASRInterface, torch.nn.Module):
         if self.pn_type == 'ctc':
             from itertools import groupby
             out = self.pn_dec[cat](out)
-            lpz = self.pn_ctc[cat].argmax(out) 
+            lpz = self.pn_ctc[cat].argmax(out)
             collapsed_indices = [x[0] for x in groupby(lpz[0])]
             hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
             nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]

@@ -558,6 +558,12 @@ def get_parser(parser=None, required=True):
         help="",
     )
     parser.add_argument(
+        "--am-type",
+        type=str,
+        default='graph',
+        help="",
+    )
+    parser.add_argument(
         "--pn-type",
         type=str,
         default='attn',

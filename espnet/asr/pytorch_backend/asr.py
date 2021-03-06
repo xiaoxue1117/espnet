@@ -238,7 +238,6 @@ class CustomUpdater(StandardUpdater):
         if math.isnan(grad_norm):
             logging.warning("grad norm is nan. Do not update model.")
         else:
-            #import pdb; pdb.set_trace()
             optimizer.step()
         optimizer.zero_grad()
 
@@ -426,21 +425,17 @@ def train(args):
     import glob
     langdict = {}
     alloWdict = {}
-    for f in glob.glob(args.phonemap_np+"*"): 
+    alloGdict = {}
+    for f in glob.glob(args.phonemap_np+"*"):
         m = np.load(f, allow_pickle=True)
         lang = f[(f.rfind('_') + 1):]
         langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
+        alloWdict.update({lang : m.tolist()})
 
     for f in glob.glob(args.phonegraph+"*.txt"):
         lang = f[(f.rfind('_') + 1):-4]
-        #langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
-        alloWdict.update({lang : f})
-    #for f in glob.glob(args.phonemap_np+"*"):
-    #    m = np.load(f, allow_pickle=True)
-    #    lang = f[(f.rfind('_') + 1):]
-    #    #lang = f[-3:]
-    #    langdict.update({'phone' : m.shape[1], lang : m.shape[0]})
-    #    alloWdict.update({lang : m.tolist()})
+        alloGdict.update({lang : f})
+
     if args.lang_units is not None:
         odim = {}
         for f in glob.glob(args.lang_units+"*"):
@@ -450,9 +445,6 @@ def train(args):
                 odim.update({lang : len(units) + 2})
     else:
         odim = {lid : odim for lid in alloWdict.keys()}
-
-
-    #langdict = {'phone': 51, '105': 37, '106': 36, '107': 42}
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:
@@ -475,11 +467,11 @@ def train(args):
         logging.info("Multitask learning mode")
 
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
-        model = load_trained_modules(idim_list[0], odim, langdict, alloWdict, args)
+        model = load_trained_modules(idim_list[0], odim, langdict, (alloWdict, alloGdict), args)
     else:
         model_class = dynamic_import(args.model_module)
         model = model_class(
-            idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, alloWdict, args
+            idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, (alloWdict, alloGdict), args
         )
     assert isinstance(model, ASRInterface)
 
@@ -504,7 +496,7 @@ def train(args):
         logging.info("writing a model config file to " + model_conf)
         f.write(
             json.dumps(
-                (idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, alloWdict, vars(args)),
+                (idim_list[0] if args.num_encs == 1 else idim_list, odim, langdict, (alloWdict, alloGdict), vars(args)),
                 indent=4,
                 ensure_ascii=False,
                 sort_keys=True,
@@ -1196,7 +1188,7 @@ def enhance(args):
     """
     set_deterministic_pytorch(args)
     # read training config
-    idim, odim, langdict, alloWdict, train_args = get_model_conf(args.model, args.model_conf)
+    idim, odim, langdict, allo, train_args = get_model_conf(args.model, args.model_conf)
 
     # TODO(ruizhili): implement enhance for multi-encoder model
     assert args.num_encs == 1, "number of encoder should be 1 ({} is given)".format(
@@ -1206,7 +1198,7 @@ def enhance(args):
     # load trained model parameters
     logging.info("reading model parameters from " + args.model)
     model_class = dynamic_import(train_args.model_module)
-    model = model_class(idim, odim, langdict, alloWdict, train_args)
+    model = model_class(idim, odim, langdict, allo, train_args)
     assert isinstance(model, ASRInterface)
     torch_load(args.model, model)
     model.recog_args = args

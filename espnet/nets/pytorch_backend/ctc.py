@@ -56,7 +56,7 @@ class CTC(torch.nn.Module):
 
     def loss_fn(self, th_pred, th_target, th_ilen, th_olen):
         if self.ctc_type == "builtin":
-            th_pred = th_pred.log_softmax(2)
+            #th_pred = th_pred.log_softmax(2)
             # Use the deterministic CuDNN implementation of CTC loss to avoid
             #  [issue#17798](https://github.com/pytorch/pytorch/issues/17798)
             with torch.backends.cudnn.flags(deterministic=True):
@@ -89,6 +89,7 @@ class CTC(torch.nn.Module):
         ys_hat = ys_hat.transpose(0, 1)
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
         olens = to_device(ys_hat,torch.LongTensor([len(s) for s in ys]))
+        ys_pad = torch.cat(ys)
         hlens = hlens.long()
         
         #count = 0
