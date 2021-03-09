@@ -19,7 +19,10 @@ class Allo(torch.autograd.Function):
         emissions_graphs = [None] * B
 
         # put weights into alloG since they will have been updated only in tensor form
-        alloG.set_weights(alloW.cpu().contiguous().data_ptr())
+        alloW_data = alloW.cpu().contiguous()
+        alloG.set_weights(alloW_data.data_ptr())
+        alloG.calc_grad = alloW.requires_grad
+        alloG.zero_grad()
 
         def process(b):
             # create emission graph
@@ -58,7 +61,6 @@ class Allo(torch.autograd.Function):
                                                 .weights_to_numpy()
                                             ).view(1, T, C)
 
-
         gtn.parallel_for(process, range(B))
         #for b in range(B):
         #    process(b)
@@ -80,16 +82,35 @@ class AlloLayer(torch.nn.Module):
     """AlloLayer module
     """
 
-    def __init__(self, allo_gtn, odim):
+    def __init__(self, allo_gtn, odim, trainable=True, redis=False, mask=None, lid=None, sm_allo=True):
         super().__init__()
         self.alloG = gtn.loadtxt(allo_gtn)
-        #self.alloG = allo_gtn
         self.phone_arc_labels = torch.tensor(self.alloG.labels_to_list())
         self.phoneme_arc_labels = torch.tensor(gtn.project_output(self.alloG).labels_to_list())
-        self.alloW = torch.nn.Parameter(torch.tensor(self.alloG.weights_to_numpy(), requires_grad=True))
+
+        if sm_allo:
+            phones, counts = torch.unique(self.phone_arc_labels, return_counts=True)
+            n_phones = len(phones)
+            max_count = counts.max().item()
+            self.alloWMask = torch.ones((n_phones, max_count)).bool()
+            alloWDense = torch.ones((n_phones, max_count))
+            # Make mask & init weights
+            for p_idx in range(n_phones):
+                self.alloWMask[p_idx, counts[p_idx]:] = False
+                alloWDense[p_idx, counts[p_idx]:] = float('-inf')
+            self.alloWDense = torch.nn.Parameter(alloWDense, requires_grad=True)
+        else:
+            if trainable:
+                self.alloW = torch.nn.Parameter(torch.tensor(self.alloG.weights_to_numpy(), requires_grad=trainable))
+            else:
+                self.alloW = torch.tensor(self.alloG.weights_to_numpy(), requires_grad=trainable)
+
         self.n_phonemes = odim
         self.fxn = Allo.apply
-        self.redis = True  # TODO: make this a hyperparam from config
+        self.redis = redis
+        self.mask = mask
+        self.lid = lid
+        self.sm_allo = sm_allo
 
     def squash_many_phonemes_for_one_phone(self, new_emissions):
         new_emissions = new_emissions.exp()    # return from log space
@@ -98,13 +119,6 @@ class AlloLayer(torch.nn.Module):
         # add probs corresponding to the same phoneme
         squashed_emissions = torch.zeros((B, T, self.n_phonemes), device=new_emissions.device, dtype=new_emissions.dtype)
         squashed_emissions.index_add_(-1, self.phoneme_arc_labels.to(new_emissions.device), new_emissions)
-
-        # redistribute eliminated prob
-        if self.redis == True:
-            redistributed = squashed_emissions.sum(dim=-1) - 1
-            redistributed = redistributed.unsqueeze(-1) / squashed_emissions.shape[-1]
-            squashed_emissions = squashed_emissions - redistributed
-
         # if the arcs are not dense, then this would not sum to 1
         squashed_emissions = squashed_emissions.log()
         return squashed_emissions
@@ -112,9 +126,17 @@ class AlloLayer(torch.nn.Module):
     def forward(self, hs_pad):
         """forward
         """
+        if self.mask != None:
+            hs_pad.masked_fill_(~self.mask.to(hs_pad.device), float('-inf'))
         log_probs = torch.nn.functional.log_softmax(hs_pad, dim=-1)
 
-        new_emissions = self.fxn(self.alloG, self.alloW, log_probs, self.phone_arc_labels)
+        if self.sm_allo:
+            # normalize allo weights to be log probs
+            alloW = self.alloWDense.log_softmax(dim=-1)[self.alloWMask==True]
+        else:
+            alloW = self.alloW
+
+        new_emissions = self.fxn(self.alloG, alloW, log_probs, self.phone_arc_labels)
         new_emissions = self.squash_many_phonemes_for_one_phone(new_emissions)
         return new_emissions
 
@@ -135,7 +157,10 @@ def main():
     #A.add_arc(0,0,4,2,math.log(1/3)) # d : B
     #A.add_arc(0,0,4,3,math.log(1/3)) # d : C
 
-    allolayer = AlloLayer(A, 4)
+    A_path = "/project/ocean/byan/espnet-ml/egs/babel/asr1/debug.gtn"
+    gtn.savetxt(A_path, A)
+    mask = torch.tensor([1, 1, 1, 1, 0]).unsqueeze(0).unsqueeze(0).bool()
+    allolayer = AlloLayer(A_path, 4, mask=mask)
 
     print(E)
     hs = allolayer(E)

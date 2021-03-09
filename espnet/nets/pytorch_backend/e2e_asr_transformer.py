@@ -113,169 +113,6 @@ class E2E(ASRInterface, torch.nn.Module):
 
         self.langdict = langdict
 
-        ## pronunciation models
-        #self.pn_enc = torch.nn.ModuleDict()
-        #self.pn_dec = torch.nn.ModuleDict()
-        #self.pn_ctc = torch.nn.ModuleDict()
-        #self.pn_type = 'attn'
-        #if hasattr(args, 'pn_type'):
-        #    self.pn_type = args.pn_type
-        #for lid in alloWdict.keys():
-        #    if hasattr(args, 'pn_type') and args.pn_type == 'attn':
-        #        self.pn_elayers = args.pn_elayers
-        #        if args.pn_elayers == 0:
-        #            self.pn_enc[lid] = torch.nn.Sequential(
-        #                        torch.nn.Linear(langdict[lid], args.adim),
-        #                        torch.nn.Dropout(args.dropout_rate))
-        #            self.pn_dec[lid] = Decoder(
-        #                    odim=odim,
-        #                    embed_dim=langdict[lid],
-        #                    selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
-        #                    attention_dim=args.adim,
-        #                    attention_heads=args.aheads,
-        #                    conv_wshare=args.wshare,
-        #                    conv_kernel_length=args.ldconv_decoder_kernel_length,
-        #                    conv_usebias=args.ldconv_usebias,
-        #                    linear_units=args.dunits,
-        #                    num_blocks=args.dlayers,
-        #                    dropout_rate=args.dropout_rate,
-        #                    positional_dropout_rate=args.dropout_rate,
-        #                    self_attention_dropout_rate=args.transformer_attn_dropout_rate,
-        #                    src_attention_dropout_rate=args.transformer_attn_dropout_rate,
-        #                )
-        #        else:
-        #            self.pn_enc[lid] = Encoder(
-        #                    idim=langdict[lid],
-        #                    selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-        #                    attention_dim=args.adim,
-        #                    attention_heads=args.pn_enc_aheads,
-        #                    linear_units=args.eunits,
-        #                    num_blocks=args.pn_elayers,
-        #                    input_layer=args.pn_input_layer,
-        #                    dropout_rate=args.dropout_rate,
-        #                    positional_dropout_rate=args.dropout_rate,
-        #                    attention_dropout_rate=args.transformer_attn_dropout_rate,
-        #                )
-        #            self.pn_dec[lid] = Decoder(
-        #                    odim=odim,
-        #                    selfattention_layer_type=args.transformer_decoder_selfattn_layer_type,
-        #                    attention_dim=args.adim,
-        #                    attention_heads=args.aheads,
-        #                    conv_wshare=args.wshare,
-        #                    conv_kernel_length=args.ldconv_decoder_kernel_length,
-        #                    conv_usebias=args.ldconv_usebias,
-        #                    linear_units=args.dunits,
-        #                    num_blocks=args.dlayers,
-        #                    dropout_rate=args.dropout_rate,
-        #                    positional_dropout_rate=args.dropout_rate,
-        #                    self_attention_dropout_rate=args.transformer_attn_dropout_rate,
-        #                    src_attention_dropout_rate=args.transformer_attn_dropout_rate,
-        #                )
-        #    elif args.pn_type == 'ctc':
-        #        self.pn_enc[lid] = None
-        #        self.pn_dec[lid] = torch.nn.Linear(langdict[lid], odim)
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'ctc2':
-        #        self.pn_enc[lid] = Encoder(
-        #                idim=langdict[lid],
-        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-        #                attention_dim=args.adim,
-        #                attention_heads=args.pn_enc_aheads,
-        #                linear_units=args.eunits,
-        #                num_blocks=args.pn_elayers,
-        #                input_layer=args.pn_input_layer,
-        #                dropout_rate=args.pn_dropout_rate,
-        #                positional_dropout_rate=args.pn_dropout_rate,
-        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-        #            )
-        #        self.pn_dec[lid] = torch.nn.Linear(args.adim, odim[lid])
-        #        self.pn_ctc[lid] = CTC(
-        #            odim[lid], odim[lid], args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'ctc3':
-        #        self.pn_enc[lid] = Encoder(
-        #                idim=langdict[lid],
-        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-        #                attention_dim=args.adim,
-        #                attention_heads=args.pn_enc_aheads,
-        #                linear_units=args.eunits,
-        #                num_blocks=args.pn_elayers,
-        #                input_layer=args.pn_input_layer,
-        #                dropout_rate=args.pn_dropout_rate,
-        #                positional_dropout_rate=args.pn_dropout_rate,
-        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-        #            )
-        #        self.pn_dec[lid] = torch.nn.Sequential(
-        #                        torch.nn.Linear(args.adim, args.adim),
-        #                        torch.nn.Dropout(args.dropout_rate),
-        #                        torch.nn.Linear(args.adim, odim))
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'ctc4':
-        #        self.pn_enc[lid] = Encoder(
-        #                idim=langdict['phone'],
-        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-        #                attention_dim=args.adim,
-        #                attention_heads=args.pn_enc_aheads,
-        #                linear_units=args.eunits,
-        #                num_blocks=args.pn_elayers,
-        #                input_layer=args.pn_input_layer,
-        #                dropout_rate=args.pn_dropout_rate,
-        #                positional_dropout_rate=args.pn_dropout_rate,
-        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-        #            )
-        #        self.pn_dec[lid] = torch.nn.Linear(args.adim, odim)
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'ctc5':
-        #        self.pn_enc[lid] = Encoder(
-        #                idim=langdict['phone'],
-        #                selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-        #                attention_dim=args.adim,
-        #                attention_heads=args.pn_enc_aheads,
-        #                linear_units=args.eunits,
-        #                num_blocks=args.pn_elayers,
-        #                input_layer=args.pn_input_layer,
-        #                dropout_rate=args.pn_dropout_rate,
-        #                positional_dropout_rate=args.pn_dropout_rate,
-        #                attention_dropout_rate=args.pn_transformer_attn_dropout_rate,
-        #            )
-        #        self.pn_dec[lid] = torch.nn.Sequential(
-        #                        torch.nn.Linear(args.adim, args.adim),
-        #                        torch.nn.Dropout(args.dropout_rate),
-        #                        torch.nn.Linear(args.adim, odim))
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'ctc6':
-        #        self.pn_dec[lid] = torch.nn.Sequential(
-        #                        torch.nn.Linear(args.adim, args.adim),
-        #                        torch.nn.Dropout(args.dropout_rate),
-        #                        torch.nn.Linear(args.adim, odim))
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-        #    elif args.pn_type == 'directbaseline':
-        #        self.pn_enc[lid] = None
-        #        self.pn_dec[lid] = torch.nn.Sequential(
-        #                        torch.nn.Linear(args.adim, args.adim),
-        #                        torch.nn.Dropout(args.dropout_rate),
-        #                        torch.nn.Linear(args.adim, odim))
-        #        self.pn_ctc[lid] = CTC(
-        #            odim, odim, args.dropout_rate, ctc_type=args.ctc_type, reduce=True
-        #        )
-
-        #self.criterion = LabelSmoothingLoss(
-        #    odim,
-        #    ignore_id,
-        #    args.lsm_weight,
-        #    args.transformer_length_normalized_loss,
-        #)
-
         self.sos = {}
         self.eos = {}
         self.odim = odim
@@ -295,11 +132,19 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             self.am_type = "graph"
 
+        if hasattr(args, 'sm_allo'):
+            sm_allo = args.sm_allo
+        else:
+            sm_allo = False
+
         self.alloW = torch.nn.ParameterDict()
         self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
             if self.am_type != "allomatbaseline":
-                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid])
+                mask = torch.Tensor(alloWdict[lid]).sum(0).bool().unsqueeze(0).unsqueeze(0)
+                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid], args.trainable, args.redis, mask, lid, sm_allo)
+                logging.warning("Setting allograph weights as trainable:" + str(args.trainable))
+                logging.warning("Setting allograph redis as:" + str(args.redis))
             else:
                 self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
                 if not hasattr(args, 'alloW_grad'):
@@ -464,296 +309,26 @@ class E2E(ASRInterface, torch.nn.Module):
         align = [[1], [1], [1]]
 
         logging.info("langid: %s", cat)
-        out = self.encode(x).unsqueeze(0)
-        if self.pn_type == 'ctc6':
-            speech_hs = out
-        if self.pn_type != 'directbaseline':
-            if self.allotype == 'none':
-                out = self.phoneme_out[cat](out)
-            else:
-                phone_hs = self.phone_out(out)
-                #get full alignment
-                n_out = phone_hs.max(dim=-1)[1].squeeze()
-                align[0] = n_out.tolist()
-                out = phone_hs.unsqueeze(2)
-                out = out * self.alloW[cat].unsqueeze(0).unsqueeze(0)
-                if self.allotype == 'max':
-                    out = torch.max(out, -1)[0]
-                elif self.allotype == 'avg':   #avg
-                    out = out.sum(dim=-1)/(self.alloW[cat].sum(dim=-1)+0.000001)
-                elif self.allotype == 'sum':   #sum
-                    out = out.sum(dim=-1)
-            ph_hyps = out.max(dim=-1)[1].squeeze()
-            align[1] = ph_hyps.tolist()
+        hs_pad = self.encode(x).unsqueeze(0)
 
-        if self.pn_type == 'ctc':
-            from itertools import groupby
-            out = self.pn_dec[cat](out)
-            lpz = self.pn_ctc[cat].argmax(out)
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
-            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
-            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            return nbest_hyps, ph_hyps, None
-        elif self.pn_type == 'ctc2' or self.pn_type == 'ctc3':
-            from itertools import groupby
-            out, _ = self.pn_enc[cat](out, None)
-            out = self.pn_dec[cat](out)
-            lpz = self.pn_ctc[cat].argmax(out)
-            align[2] = lpz.squeeze().tolist()
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos[cat]] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
-            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
-            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            return nbest_hyps, ph_hyps, align
-        elif self.pn_type == 'ctc4' or self.pn_type == 'ctc5':
-            from itertools import groupby
-            out, _ = self.pn_enc[cat](phone_hs, None)
-            out = self.pn_dec[cat](out)
-            lpz = self.pn_ctc[cat].argmax(out)
-            align[2] = lpz.squeeze().tolist()
-            mat = self.pn_ctc[cat].softmax(out)
-            hyp = ctcBeamSearch(mat.squeeze().numpy())
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + list(hyp)}]
-            
-            #collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            #hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            #nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            #if recog_args.beam_size > 1:
-            #    raise NotImplementedError("Pure CTC beam search is not implemented.")
-            ## TODO(hirofumi0810): Implement beam search
-            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
-            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
-
-            return nbest_hyps, ph_hyps, align
-            #return nbest_hyps, ph_hyps, align, beam_hyp
-        elif self.pn_type == 'ctc6':
-            from itertools import groupby
-            out = self.pn_dec[cat](speech_hs)
-            lpz = self.pn_ctc[cat].argmax(out)
-            align[2] = lpz.squeeze().tolist()
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
-            collapsed_indices = [x[0] for x in groupby(ph_hyps)]
-            ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            return nbest_hyps, ph_hyps, align
-        elif self.pn_type == 'directbaseline':
-            from itertools import groupby
-            out = self.pn_dec[cat](out)
-            lpz = self.pn_ctc[cat].argmax(out) 
-            collapsed_indices = [x[0] for x in groupby(lpz[0])]
-            hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
-            nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
-            if recog_args.beam_size > 1:
-                raise NotImplementedError("Pure CTC beam search is not implemented.")
-            # TODO(hirofumi0810): Implement beam search
-            ph_hyps = [1]
-            return nbest_hyps, ph_hyps, None
-
-        lpz = None
-        if self.pn_elayers == 0:
-            enc_output = self.pn_enc[cat](out)
+        phone_hs = self.phone_out(hs_pad)
+        if self.am_type != 'allomatbaseline':
+            # am CTC
+            hs_pad = self.allodict[cat](phone_hs)    #hs_pad = phoneme_emissions
         else:
-            enc_output,_ = self.pn_enc[cat](out, None)
-        h = enc_output.squeeze(0)
+            hs_pad = phone_hs.unsqueeze(2) * self.alloW[cat].unsqueeze(0).unsqueeze(0)
+            hs_pad = hs_pad.sum(dim=-1)
+            hs_pad = hs_pad.log_softmax(dim=-1)
 
-        logging.info("input lengths: " + str(h.size(0)))
-        # search parms
-        beam = recog_args.beam_size
-        penalty = recog_args.penalty
-        ctc_weight = recog_args.ctc_weight
+        n_out = phone_hs.max(dim=-1)[1].squeeze()
+        align[0] = n_out.tolist()   # phones
+        m_out = hs_pad.max(dim=-1)[1].squeeze()
+        align[1] = m_out.tolist()   # phonemes
 
-        # preprare sos
-        y = self.sos
-        vy = h.new_zeros(1).long()
-
-        if recog_args.maxlenratio == 0:
-            maxlen = h.shape[0]
-        else:
-            # maxlen >= 1
-            maxlen = max(1, int(recog_args.maxlenratio * h.size(0)))
-        minlen = int(recog_args.minlenratio * h.size(0))
-        logging.info("max output length: " + str(maxlen))
-        logging.info("min output length: " + str(minlen))
-
-        # initialize hypothesis
-        if rnnlm:
-            hyp = {"score": 0.0, "yseq": [y], "rnnlm_prev": None}
-        else:
-            hyp = {"score": 0.0, "yseq": [y]}
-        if lpz is not None:
-            ctc_prefix_score = CTCPrefixScore(lpz.detach().numpy(), 0, self.eos, numpy)
-            hyp["ctc_state_prev"] = ctc_prefix_score.initial_state()
-            hyp["ctc_score_prev"] = 0.0
-            if ctc_weight != 1.0:
-                # pre-pruning based on attention scores
-                ctc_beam = min(lpz.shape[-1], int(beam * CTC_SCORING_RATIO))
-            else:
-                ctc_beam = lpz.shape[-1]
-        hyps = [hyp]
-        ended_hyps = []
-
-        import six
-
-        traced_decoder = None
-        for i in six.moves.range(maxlen):
-            logging.debug("position " + str(i))
-
-            hyps_best_kept = []
-            for hyp in hyps:
-                vy[0] = hyp["yseq"][i]
-
-                # get nbest local scores and their ids
-                ys_mask = subsequent_mask(i + 1).unsqueeze(0)
-                ys = torch.tensor(hyp["yseq"]).unsqueeze(0)
-                # FIXME: jit does not match non-jit result
-                if use_jit:
-                    if traced_decoder is None:
-                        traced_decoder = torch.jit.trace(
-                            self.decoder.forward_one_step, (ys, ys_mask, enc_output)
-                        )
-                    local_att_scores = traced_decoder(ys, ys_mask, enc_output)[0]
-                else:
-                    local_att_scores = self.pn_dec[cat].forward_one_step(
-                        ys, ys_mask, enc_output
-                    )[0]
-
-                if rnnlm:
-                    rnnlm_state, local_lm_scores = rnnlm.predict(hyp["rnnlm_prev"], vy)
-                    local_scores = (
-                        local_att_scores + recog_args.lm_weight * local_lm_scores
-                    )
-                else:
-                    local_scores = local_att_scores
-
-                if lpz is not None:
-                    local_best_scores, local_best_ids = torch.topk(
-                        local_att_scores, ctc_beam, dim=1
-                    )
-                    ctc_scores, ctc_states = ctc_prefix_score(
-                        hyp["yseq"], local_best_ids[0], hyp["ctc_state_prev"]
-                    )
-                    local_scores = (1.0 - ctc_weight) * local_att_scores[
-                        :, local_best_ids[0]
-                    ] + ctc_weight * torch.from_numpy(
-                        ctc_scores - hyp["ctc_score_prev"]
-                    )
-                    if rnnlm:
-                        local_scores += (
-                            recog_args.lm_weight * local_lm_scores[:, local_best_ids[0]]
-                        )
-                    local_best_scores, joint_best_ids = torch.topk(
-                        local_scores, beam, dim=1
-                    )
-                    local_best_ids = local_best_ids[:, joint_best_ids[0]]
-                else:
-                    local_best_scores, local_best_ids = torch.topk(
-                        local_scores, beam, dim=1
-                    )
-
-                for j in six.moves.range(beam):
-                    new_hyp = {}
-                    new_hyp["score"] = hyp["score"] + float(local_best_scores[0, j])
-                    new_hyp["yseq"] = [0] * (1 + len(hyp["yseq"]))
-                    new_hyp["yseq"][: len(hyp["yseq"])] = hyp["yseq"]
-                    new_hyp["yseq"][len(hyp["yseq"])] = int(local_best_ids[0, j])
-                    if rnnlm:
-                        new_hyp["rnnlm_prev"] = rnnlm_state
-                    if lpz is not None:
-                        new_hyp["ctc_state_prev"] = ctc_states[joint_best_ids[0, j]]
-                        new_hyp["ctc_score_prev"] = ctc_scores[joint_best_ids[0, j]]
-                    # will be (2 x beam) hyps at most
-                    hyps_best_kept.append(new_hyp)
-
-                hyps_best_kept = sorted(
-                    hyps_best_kept, key=lambda x: x["score"], reverse=True
-                )[:beam]
-
-            # sort and get nbest
-            hyps = hyps_best_kept
-            logging.debug("number of pruned hypothes: " + str(len(hyps)))
-            if char_list is not None:
-                logging.debug(
-                    "best hypo: "
-                    + "".join([char_list[int(x)] for x in hyps[0]["yseq"][1:]])
-                )
-
-            # add eos in the final loop to avoid that there are no ended hyps
-            if i == maxlen - 1:
-                logging.info("adding <eos> in the last postion in the loop")
-                for hyp in hyps:
-                    hyp["yseq"].append(self.eos)
-
-            # add ended hypothes to a final list, and removed them from current hypothes
-            # (this will be a probmlem, number of hyps < beam)
-            remained_hyps = []
-            for hyp in hyps:
-                if hyp["yseq"][-1] == self.eos:
-                    # only store the sequence that has more than minlen outputs
-                    # also add penalty
-                    if len(hyp["yseq"]) > minlen:
-                        hyp["score"] += (i + 1) * penalty
-                        if rnnlm:  # Word LM needs to add final <eos> score
-                            hyp["score"] += recog_args.lm_weight * rnnlm.final(
-                                hyp["rnnlm_prev"]
-                            )
-                        ended_hyps.append(hyp)
-                else:
-                    remained_hyps.append(hyp)
-
-            # end detection
-            if end_detect(ended_hyps, i) and recog_args.maxlenratio == 0.0:
-                logging.info("end detected at %d", i)
-                break
-
-            hyps = remained_hyps
-            if len(hyps) > 0:
-                logging.debug("remeined hypothes: " + str(len(hyps)))
-            else:
-                logging.info("no hypothesis. Finish decoding.")
-                break
-
-            if char_list is not None:
-                for hyp in hyps:
-                    logging.debug(
-                        "hypo: " + "".join([char_list[int(x)] for x in hyp["yseq"][1:]])
-                    )
-
-            logging.debug("number of ended hypothes: " + str(len(ended_hyps)))
-
-        nbest_hyps = sorted(ended_hyps, key=lambda x: x["score"], reverse=True)[
-            : min(len(ended_hyps), recog_args.nbest)
-        ]
-
-        # check number of hypotheis
-        if len(nbest_hyps) == 0:
-            logging.warning(
-                "there is no N-best results, perform recognition "
-                "again with smaller minlenratio."
-            )
-            # should copy becasuse Namespace will be overwritten globally
-            recog_args = Namespace(**vars(recog_args))
-            recog_args.minlenratio = max(0.0, recog_args.minlenratio - 0.1)
-            return self.recognize(x, recog_args, char_list, rnnlm)
-
-        logging.info("total log probability: " + str(nbest_hyps[0]["score"]))
-        logging.info(
-            "normalized log probability: "
-            + str(nbest_hyps[0]["score"] / len(nbest_hyps[0]["yseq"]))
-        )
-        return nbest_hyps
+        from itertools import groupby
+        collapsed_indices = [x[0] for x in groupby(m_out)]
+        ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
+        return [{"score" : 0.0, "yseq" : [self.sos[cat]]}], ph_hyps, align
 
     def calculate_all_attentions(self, xs_pad, ilens, ys_pad, ys_ph_pad, cats):
         """E2E attention calculation.

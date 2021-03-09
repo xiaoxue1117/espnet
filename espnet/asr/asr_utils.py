@@ -850,7 +850,7 @@ def add_results_to_json(js, nbest_hyps, ph_hyps, char_list, align):
             if "text" in out_dic.keys():
                 logging.info("groundtruth: %s" % out_dic["text"])
             logging.info("prediction : %s" % out_dic["rec_text"])
-            
+
             #phonemes
             ph_hyps = " ".join([str(i) for i in ph_hyps])
             out_dic = {"rec_token": ph_hyps, "token": ph_ref["tokenid"]}
