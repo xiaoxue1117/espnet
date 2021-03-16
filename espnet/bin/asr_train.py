@@ -587,6 +587,12 @@ def get_parser(parser=None, required=True):
         default=True,
         help="",
     )
+    parser.add_argument(
+        "--phoneme-bias",
+        type=strtobool,
+        default=False,
+        help="",
+    )
     parser.add_argument("--pn-dropout-rate", type=float, default=None, help="")
     parser.add_argument("--pn-transformer-attn-dropout-rate", type=float, default=None, help="")
     parser.add_argument(

@@ -13,7 +13,7 @@ from espnet.nets.pytorch_backend.nets_utils import to_device
 class Allo(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, alloG, alloW, log_probs, phone_arc_labels):
+    def forward(ctx, alloG, alloW, log_probs, phone_arc_labels, training=True):
         B, T, C = log_probs.shape
         new_emissions_graphs = [None] * B
         emissions_graphs = [None] * B
@@ -41,9 +41,12 @@ class Allo(torch.autograd.Function):
         ctx.auxiliary_data = (emissions_graphs, alloG, new_emissions_graphs, log_probs.shape, len(alloW), phone_arc_labels)
 
         # phoneme emissions
-        new_emissions = torch.tensor([new_emissions_graphs[b].weights_to_list() for b in range(B)], \
-                requires_grad=alloW.requires_grad, device=alloW.device).reshape(B, T, -1)
-
+        if training:
+            new_emissions = torch.tensor([new_emissions_graphs[b].weights_to_list() for b in range(B)], \
+                    requires_grad=alloW.requires_grad, device=alloW.device).reshape(B, T, -1)
+        else:
+            new_emissions = torch.tensor([new_emissions_graphs[b].weights_to_list() for b in range(B)], \
+                    requires_grad=False, device=alloW.device).reshape(B, T, -1)
         return new_emissions.to(log_probs.device)
 
     @staticmethod
@@ -76,13 +79,14 @@ class Allo(torch.autograd.Function):
             alloW_grad,  # alloW
             input_grad,  # log_probs
             None,  #phone_arc_labels
+            None,  #training
         )
 
 class AlloLayer(torch.nn.Module):
     """AlloLayer module
     """
 
-    def __init__(self, allo_gtn, odim, trainable=True, redis=False, mask=None, lid=None, sm_allo=True):
+    def __init__(self, allo_gtn, odim, trainable=True, redis=False, mask=None, lid=None, sm_allo=True, phoneme_bias=False):
         super().__init__()
         self.alloG = gtn.loadtxt(allo_gtn)
         self.phone_arc_labels = torch.tensor(self.alloG.labels_to_list())
@@ -112,6 +116,9 @@ class AlloLayer(torch.nn.Module):
         self.lid = lid
         self.sm_allo = sm_allo
 
+        if phoneme_bias:
+            self.phonemeW = torch.nn.Parameter(torch.zeros((self.n_phonemes), requires_grad=trainable)).unsqueeze(0).unsqueeze(0)
+
     def squash_many_phonemes_for_one_phone(self, new_emissions):
         new_emissions = new_emissions.exp()    # return from log space
         B, T, _ = new_emissions.shape
@@ -123,7 +130,7 @@ class AlloLayer(torch.nn.Module):
         squashed_emissions = squashed_emissions.log()
         return squashed_emissions
 
-    def forward(self, hs_pad):
+    def forward(self, hs_pad, training=True):
         """forward
         """
         if self.mask != None:
@@ -133,12 +140,34 @@ class AlloLayer(torch.nn.Module):
         if self.sm_allo:
             # normalize allo weights to be log probs
             alloW = self.alloWDense.log_softmax(dim=-1)[self.alloWMask==True]
+            new_emissions = self.fxn(self.alloG, alloW, log_probs, self.phone_arc_labels)
         else:
-            alloW = self.alloW
+            new_emissions = self.fxn(self.alloG, self.alloW, log_probs, self.phone_arc_labels, training)
 
-        new_emissions = self.fxn(self.alloG, alloW, log_probs, self.phone_arc_labels)
         new_emissions = self.squash_many_phonemes_for_one_phone(new_emissions)
+
+        if hasattr(self, 'phonemeW'):
+            new_emissions = new_emissions + self.phonemeW.to(new_emissions.device)
+
         return new_emissions
+
+    def get_alloW_SM(self):
+        if hasattr(self, 'alloW'):
+            phones, counts = torch.unique(self.phone_arc_labels, return_counts=True)
+            max_count = counts.max().item()
+            n_phones = len(phones)
+            alloWMask = torch.ones((n_phones, max_count)).bool()
+            alloWDense = torch.ones((n_phones, max_count))
+            start = 0
+            for p_idx in range(n_phones):
+                alloWMask[p_idx, counts[p_idx]:] = False
+                alloWDense[p_idx, :counts[p_idx]] = self.alloW[start: counts[p_idx]+start]
+                alloWDense[p_idx, counts[p_idx]:] = float('-inf')
+                start = start + counts[p_idx]
+            alloWDenseSM = alloWDense.log_softmax(dim=-1)
+            return alloWDenseSM[alloWMask==True]
+        else:
+            return self.alloWDense.log_softmax(dim=-1)[self.alloWMask==True]
 
 def main():
     # 2 x 5 Emissions
@@ -160,14 +189,18 @@ def main():
     A_path = "/project/ocean/byan/espnet-ml/egs/babel/asr1/debug.gtn"
     gtn.savetxt(A_path, A)
     mask = torch.tensor([1, 1, 1, 1, 0]).unsqueeze(0).unsqueeze(0).bool()
-    allolayer = AlloLayer(A_path, 4, mask=mask)
+    allolayer = AlloLayer(A_path, 4, mask=mask, sm_allo=False)
 
     print(E)
-    hs = allolayer(E)
-    from espnet.nets.pytorch_backend.ctc import CTC
-    ctcfxn = CTC(4, 4, 0.1, "builtin", reduce=True)
-    loss, _ = ctcfxn(hs, torch.tensor([2]), torch.tensor([[1, 2]]))
-    loss.backward()
+    #hs = allolayer(E)
+    #from espnet.nets.pytorch_backend.ctc import CTC
+    #ctcfxn = CTC(4, 4, 0.1, "builtin", reduce=True)
+    #loss, _ = ctcfxn(hs, torch.tensor([2]), torch.tensor([[1, 2]]))
+    #loss.backward()
+
+    with torch.no_grad():
+        hs_inference = allolayer(E, training=False)
+        hs_inference = allolayer(E)
 
 if __name__ == "__main__":
     main()

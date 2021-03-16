@@ -126,6 +126,7 @@ class E2E(ASRInterface, torch.nn.Module):
                                 torch.nn.Dropout(args.dropout_rate),
                                 torch.nn.Linear(args.adim, langdict['phone']))
 
+
         # allophone layer
         if hasattr(args, 'am_type'):
             self.am_type = args.am_type
@@ -137,12 +138,17 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             sm_allo = False
 
+        if hasattr(args, 'phoneme_bias'):
+            phoneme_bias = args.phoneme_bias
+        else:
+            phoneme_bias = False
+
         self.alloW = torch.nn.ParameterDict()
         self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
             if self.am_type != "allomatbaseline":
                 mask = torch.Tensor(alloWdict[lid]).sum(0).bool().unsqueeze(0).unsqueeze(0)
-                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid], args.trainable, args.redis, mask, lid, sm_allo)
+                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid], args.trainable, args.redis, mask, lid, sm_allo, phoneme_bias)
                 logging.warning("Setting allograph weights as trainable:" + str(args.trainable))
                 logging.warning("Setting allograph redis as:" + str(args.redis))
             else:
@@ -156,6 +162,7 @@ class E2E(ASRInterface, torch.nn.Module):
         if hasattr(args, 'allotype'):
             self.allotype = args.allotype #'max'
 
+        # baseline w/o allophone
         if self.allotype == 'none':
             self.phoneme_out = torch.nn.ModuleDict()
             for lid in alloWdict.keys():
@@ -221,16 +228,20 @@ class E2E(ASRInterface, torch.nn.Module):
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
 
-        # phone logits
-        hs_pad = self.phone_out(hs_pad)
-
-        if self.am_type != 'allomatbaseline':
-            # am CTC
-            hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
-        else:
-            hs_pad = hs_pad.unsqueeze(2) * self.alloW[lid].unsqueeze(0).unsqueeze(0)
-            hs_pad = hs_pad.sum(dim=-1)
+        if self.allotype == 'none':
+            hs_pad = self.phoneme_out[lid](hs_pad)
             hs_pad = hs_pad.log_softmax(dim=-1)
+        else:
+            # phone logits
+            hs_pad = self.phone_out(hs_pad)
+
+            if self.am_type != 'allomatbaseline':
+                # am CTC
+                hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
+            else:
+                hs_pad = hs_pad.unsqueeze(2) * self.alloW[lid].unsqueeze(0).unsqueeze(0)
+                hs_pad = hs_pad.sum(dim=-1)
+                hs_pad = hs_pad.log_softmax(dim=-1)
 
         # input is hs_pad which is already log_sm
         loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
@@ -301,6 +312,19 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: N-best decoding results
         :rtype: list
         """
+        #import numpy as np
+        #for lid in self.allodict.keys():
+        #    #dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-fixedSM_specaug_ngpu3/alloWDense50_numpy_"+lid
+        #    #np_alloWDense = self.allodict[lid].alloWDense.detach().cpu().numpy()
+        #    #np.save(dst, np_alloWDense)
+        #    #dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-fixedSM_specaug_ngpu3/alloW_numpy_"+lid
+        #    #np_alloW = self.allodict[lid].alloWDense.log_softmax(dim=-1)[self.allodict[lid].alloWMask==True].detach().cpu().numpy()
+        #    #np.save(dst, np_alloW)
+        #    dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-precisionfix_specaug_ngpu3/alloW_numpy_"+lid+"raw"
+        #    np_alloW = self.allodict[lid].alloW.log_softmax(dim=-1).detach().cpu().numpy()
+        #    #np_alloW = self.allodict[lid].get_alloW_SM().detach().cpu().numpy()
+        #    np.save(dst, np_alloW)
+        #import pdb; pdb.set_trace()
         if cat not in self.alloW.keys():
             if cat == 'en':
                 cat = '000'
@@ -311,19 +335,26 @@ class E2E(ASRInterface, torch.nn.Module):
         logging.info("langid: %s", cat)
         hs_pad = self.encode(x).unsqueeze(0)
 
-        phone_hs = self.phone_out(hs_pad)
-        if self.am_type != 'allomatbaseline':
-            # am CTC
-            hs_pad = self.allodict[cat](phone_hs)    #hs_pad = phoneme_emissions
-        else:
-            hs_pad = phone_hs.unsqueeze(2) * self.alloW[cat].unsqueeze(0).unsqueeze(0)
-            hs_pad = hs_pad.sum(dim=-1)
+        if self.allotype == 'none':
+            hs_pad = self.phoneme_out[cat](hs_pad)
             hs_pad = hs_pad.log_softmax(dim=-1)
 
-        n_out = phone_hs.max(dim=-1)[1].squeeze()
-        align[0] = n_out.tolist()   # phones
-        m_out = hs_pad.max(dim=-1)[1].squeeze()
-        align[1] = m_out.tolist()   # phonemes
+            m_out = hs_pad.max(dim=-1)[1].squeeze()
+            align[1] = m_out.tolist()   # phonemes
+        else:
+            phone_hs = self.phone_out(hs_pad)
+            if self.am_type != 'allomatbaseline':
+                # am CTC
+                hs_pad = self.allodict[cat](phone_hs, training=False)    #hs_pad = phoneme_emissions
+            else:
+                hs_pad = phone_hs.unsqueeze(2) * self.alloW[cat].unsqueeze(0).unsqueeze(0)
+                hs_pad = hs_pad.sum(dim=-1)
+                hs_pad = hs_pad.log_softmax(dim=-1)
+
+            n_out = phone_hs.max(dim=-1)[1].squeeze()
+            align[0] = n_out.tolist()   # phones
+            m_out = hs_pad.max(dim=-1)[1].squeeze()
+            align[1] = m_out.tolist()   # phonemes
 
         from itertools import groupby
         collapsed_indices = [x[0] for x in groupby(m_out)]
