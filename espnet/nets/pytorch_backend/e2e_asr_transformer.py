@@ -320,9 +320,9 @@ class E2E(ASRInterface, torch.nn.Module):
         #    #dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-fixedSM_specaug_ngpu3/alloW_numpy_"+lid
         #    #np_alloW = self.allodict[lid].alloWDense.log_softmax(dim=-1)[self.allodict[lid].alloWMask==True].detach().cpu().numpy()
         #    #np.save(dst, np_alloW)
-        #    dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-precisionfix_specaug_ngpu3/alloW_numpy_"+lid+"raw"
-        #    np_alloW = self.allodict[lid].alloW.log_softmax(dim=-1).detach().cpu().numpy()
-        #    #np_alloW = self.allodict[lid].get_alloW_SM().detach().cpu().numpy()
+        #    dst = "/project/ocean/byan/espnet-ml/egs/babel/asr1/exp/train_swbd_pytorch_gtn-traintrue-redisfalse-SMconstraint-phonemebias_specaug_ngpu3/alloW_numpy_"+lid
+        #    #np_alloW = self.allodict[lid].alloW.log_softmax(dim=-1).detach().cpu().numpy()
+        #    np_alloW = self.allodict[lid].get_alloW_SM().detach().cpu().numpy()
         #    np.save(dst, np_alloW)
         #import pdb; pdb.set_trace()
         if cat not in self.alloW.keys():

@@ -173,10 +173,10 @@ def main(args):
 
         arcs = mat2graph(alloW)
 
-        alloW = np.exp(np.load(args.alloW_dir + lid + "raw.npy"))
+        alloW = np.exp(np.load(args.alloW_dir + lid + ".npy"))
         #print(lid)
         #print("---")
-        with open(args.output+"/"+lid+"_pf100_raw.txt", "w", encoding="utf-8") as out_f:
+        with open(args.output+"/"+lid+"_SMbias50.txt", "w", encoding="utf-8") as out_f:
             for i,a in enumerate(arcs):
                 out_f.write(phones[a[0]] + " " + lang_phonemes[a[1]] + " " + str(a[2]) + " " + str(alloW[i]) + "\n")
                 #print(phones[a[0]], lang_phonemes[a[1]], a[2], alloW[i])
