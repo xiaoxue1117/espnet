@@ -68,12 +68,12 @@ class Allo(torch.autograd.Function):
         #for b in range(B):
         #    process(b)
         alloW_grad = torch.from_numpy(alloG.grad().weights_to_numpy()).to(grad_output.device)
+        #alloW_grad *= grad_output.sum(0).sum(0).to(alloW_grad.device) / B / T
         alloW_grad *= grad_output.sum(0).sum(0).to(alloW_grad.device)
 
         input_grad_mult = torch.zeros(input_grad.shape, device=grad_output.device, dtype=grad_output.dtype)
         input_grad_mult.index_add_(-1, phone_arc_labels.to(grad_output.device), grad_output)
         input_grad = input_grad.to(grad_output.device) * input_grad_mult
-
         return (
             None,  # alloG
             alloW_grad,  # alloW
@@ -86,22 +86,61 @@ class AlloLayer(torch.nn.Module):
     """AlloLayer module
     """
 
-    def __init__(self, allo_gtn, odim, trainable=True, redis=False, mask=None, lid=None, sm_allo=True, phoneme_bias=False):
+    def __init__(self, allo_gtn, odim, trainable=True, redis=False, mask=None, lid=None, sm_allo=True, phoneme_bias=False, sm_phonemes=False, full_constrained=False, sm_after=False):
         super().__init__()
         self.alloG = gtn.loadtxt(allo_gtn)
         self.phone_arc_labels = torch.tensor(self.alloG.labels_to_list())
         self.phoneme_arc_labels = torch.tensor(gtn.project_output(self.alloG).labels_to_list())
 
-        if sm_allo:
+        if full_constrained:
+            # phoneme normalization
+            phonemes, counts = torch.unique(self.phoneme_arc_labels, return_counts=True)
+            n_phonemes = len(phonemes)
+            max_count = counts.max().item()
+            self.alloWMask1 = torch.ones((n_phonemes, max_count)).bool()
+            alloWDense1 = torch.ones((n_phonemes, max_count))
+            # Make mask & init weights
+            for p_idx in range(n_phonemes):
+                self.alloWMask1[p_idx, counts[p_idx]:] = False
+                alloWDense1[p_idx, counts[p_idx]:] = float('-inf')
+            self.alloWDense1 = torch.nn.Parameter(alloWDense1, requires_grad=True)
+
+            # else, allophone normalization
             phones, counts = torch.unique(self.phone_arc_labels, return_counts=True)
             n_phones = len(phones)
             max_count = counts.max().item()
-            self.alloWMask = torch.ones((n_phones, max_count)).bool()
-            alloWDense = torch.ones((n_phones, max_count))
+            self.alloWMask2 = torch.ones((n_phones, max_count)).bool()
+            alloWDense2 = torch.ones((n_phones, max_count))
             # Make mask & init weights
             for p_idx in range(n_phones):
-                self.alloWMask[p_idx, counts[p_idx]:] = False
-                alloWDense[p_idx, counts[p_idx]:] = float('-inf')
+                self.alloWMask2[p_idx, counts[p_idx]:] = False
+                alloWDense2[p_idx, counts[p_idx]:] = float('-inf')
+            self.alloWDense2 = torch.nn.Parameter(alloWDense2, requires_grad=True)
+
+        elif sm_allo:
+            # phoneme normalization
+            if sm_phonemes:
+                phonemes, counts = torch.unique(self.phoneme_arc_labels, return_counts=True)
+                n_phonemes = len(phonemes)
+                max_count = counts.max().item()
+                self.alloWMask = torch.ones((n_phonemes, max_count)).bool()
+                alloWDense = torch.ones((n_phonemes, max_count))
+                # Make mask & init weights
+                for p_idx in range(n_phonemes):
+                    self.alloWMask[p_idx, counts[p_idx]:] = False
+                    alloWDense[p_idx, counts[p_idx]:] = float('-inf')
+            # else, allophone normalization
+            else:
+                phones, counts = torch.unique(self.phone_arc_labels, return_counts=True)
+                n_phones = len(phones)
+                max_count = counts.max().item()
+                self.alloWMask = torch.ones((n_phones, max_count)).bool()
+                alloWDense = torch.ones((n_phones, max_count))
+                # Make mask & init weights
+                for p_idx in range(n_phones):
+                    self.alloWMask[p_idx, counts[p_idx]:] = False
+                    alloWDense[p_idx, counts[p_idx]:] = float('-inf')
+
             self.alloWDense = torch.nn.Parameter(alloWDense, requires_grad=True)
         else:
             if trainable:
@@ -115,6 +154,9 @@ class AlloLayer(torch.nn.Module):
         self.mask = mask
         self.lid = lid
         self.sm_allo = sm_allo
+        self.sm_phonemes = sm_phonemes
+        self.full_constrained = full_constrained
+        self.sm_after = sm_after
 
         if phoneme_bias:
             self.phonemeW = torch.nn.Parameter(torch.zeros((self.n_phonemes), requires_grad=trainable)).unsqueeze(0).unsqueeze(0)
@@ -125,20 +167,28 @@ class AlloLayer(torch.nn.Module):
 
         # add probs corresponding to the same phoneme
         squashed_emissions = torch.zeros((B, T, self.n_phonemes), device=new_emissions.device, dtype=new_emissions.dtype)
-        squashed_emissions.index_add_(-1, self.phoneme_arc_labels.to(new_emissions.device), new_emissions)
+        new_emissions = squashed_emissions.index_add(-1, self.phoneme_arc_labels.to(new_emissions.device), new_emissions)
+        #squashed_emissions.index_add_(-1, self.phoneme_arc_labels.to(new_emissions.device), new_emissions)
         # if the arcs are not dense, then this would not sum to 1
-        squashed_emissions = squashed_emissions.log()
-        return squashed_emissions
+        new_emissions = new_emissions.log()
+        return new_emissions
 
     def forward(self, hs_pad, training=True):
         """forward
         """
-        if self.mask != None:
-            hs_pad.masked_fill_(~self.mask.to(hs_pad.device), float('-inf'))
-        log_probs = torch.nn.functional.log_softmax(hs_pad, dim=-1)
+        if not self.sm_after:
+            if self.mask != None:
+                hs_pad = hs_pad.masked_fill(~self.mask.to(hs_pad.device), float('-inf'))
+            log_probs = torch.nn.functional.log_softmax(hs_pad, dim=-1)
+        else:
+            log_probs = hs_pad
 
-        if self.sm_allo:
-            # normalize allo weights to be log probs
+        if self.full_constrained:
+            alloW1 = self.alloWDense1.log_softmax(dim=-1)[self.alloWMask1==True]
+            alloW2 = self.alloWDense2.log_softmax(dim=-1)[self.alloWMask2==True]
+            alloW = (alloW1 + alloW2) / 2
+            new_emissions = self.fxn(self.alloG, alloW, log_probs, self.phone_arc_labels)
+        elif self.sm_allo:
             alloW = self.alloWDense.log_softmax(dim=-1)[self.alloWMask==True]
             new_emissions = self.fxn(self.alloG, alloW, log_probs, self.phone_arc_labels)
         else:
@@ -148,6 +198,9 @@ class AlloLayer(torch.nn.Module):
 
         if hasattr(self, 'phonemeW'):
             new_emissions = new_emissions + self.phonemeW.to(new_emissions.device)
+
+        if self.sm_after:
+            new_emissions = new_emissions.log_softmax(dim=-1)
 
         return new_emissions
 
@@ -171,7 +224,9 @@ class AlloLayer(torch.nn.Module):
 
 def main():
     # 2 x 5 Emissions
-    E = torch.rand((1, 2, 5), requires_grad=True).log_softmax(dim=-1)
+    torch.manual_seed(10)
+    E = torch.rand((2, 3, 5), requires_grad=True).log_softmax(dim=-1)
+    #E = torch.ones((1, 2, 5), requires_grad=True).log_softmax(dim=-1)
 
     # graph, 5 arcs
     A = gtn.Graph()
@@ -189,18 +244,20 @@ def main():
     A_path = "/project/ocean/byan/espnet-ml/egs/babel/asr1/debug.gtn"
     gtn.savetxt(A_path, A)
     mask = torch.tensor([1, 1, 1, 1, 0]).unsqueeze(0).unsqueeze(0).bool()
-    allolayer = AlloLayer(A_path, 4, mask=mask, sm_allo=False)
+    allolayer = AlloLayer(A_path, 4, mask=mask, sm_allo=True, sm_phonemes=True)
 
     print(E)
-    #hs = allolayer(E)
-    #from espnet.nets.pytorch_backend.ctc import CTC
-    #ctcfxn = CTC(4, 4, 0.1, "builtin", reduce=True)
-    #loss, _ = ctcfxn(hs, torch.tensor([2]), torch.tensor([[1, 2]]))
-    #loss.backward()
-
-    with torch.no_grad():
-        hs_inference = allolayer(E, training=False)
-        hs_inference = allolayer(E)
+    hs = allolayer(E)
+    from espnet.nets.pytorch_backend.ctc import CTC
+    #ctcfxn = CTC(4, 4, 0.1, "gtnctc", reduce=True)
+    ctcfxn = CTC(4, 4, 0.1, "builtin", reduce=True)
+    loss, _ = ctcfxn(hs, torch.tensor([3,3]), torch.tensor([[1,2,3],[1,2,3]]))
+    print(loss)
+    loss.backward()
+    print(allolayer.alloW.grad)
+    #with torch.no_grad():
+    #    hs_inference = allolayer(E, training=False)
+    #    hs_inference = allolayer(E)
 
 if __name__ == "__main__":
     main()

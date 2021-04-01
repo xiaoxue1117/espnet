@@ -26,7 +26,6 @@ class GTNCTCLossFunction(torch.autograd.Function):
         losses = [None] * B
         scales = [None] * B
         emissions_graphs = [None] * B
-
         def process(b):
             # create emission graph
             g_emissions = gtn.linear_graph(T, C, log_probs.requires_grad)

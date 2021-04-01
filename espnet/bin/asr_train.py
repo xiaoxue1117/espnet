@@ -588,7 +588,37 @@ def get_parser(parser=None, required=True):
         help="",
     )
     parser.add_argument(
+        "--sm-phonemes",
+        type=strtobool,
+        default=False,
+        help="",
+    )
+    parser.add_argument(
         "--phoneme-bias",
+        type=strtobool,
+        default=False,
+        help="",
+    )
+    parser.add_argument(
+        "--full-constrained",
+        type=strtobool,
+        default=False,
+        help="",
+    )
+    parser.add_argument(
+        "--use-gtn-ctc",
+        type=strtobool,
+        default=False,
+        help="",
+    )
+    parser.add_argument(
+        "--use-conv-allo",
+        type=strtobool,
+        default=False,
+        help="",
+    )
+    parser.add_argument(
+        "--sm-after",
         type=strtobool,
         default=False,
         help="",

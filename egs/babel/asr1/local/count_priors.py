@@ -60,8 +60,10 @@ def main(args):
 
     for lid in langs:
         print("---"+lid+"---")
-        for tok in range(len(priors[lid].keys())):
-            print(lang_phonemes[lid][tok], "{:.5%}".format(priors[lid][tok]))
+        #print(totals[lid])
+        for tok in priors[lid].keys():
+            print(lang_phonemes[lid][tok], priors[lid][tok])
+            #print(tok, lang_phonemes[lid][tok], priors[lid][tok])
             #print(lang_phonemes[lid][tok], "{:.5%}".format(priors[lid][tok] / totals[lid]))
 
 if __name__ == "__main__":

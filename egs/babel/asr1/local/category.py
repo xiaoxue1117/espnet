@@ -19,7 +19,7 @@ def main(args, start, end):
         data = json.load(f)
 
     for u in data["utts"].keys():
-        if u[:2] == 'sw' or u[:2] == 'en':
+        if u[:2] == 'sw' or u[:2] == 'en' or u[:2] == "fs":
             data["utts"][u]["category"] = '000'
         else:
             data["utts"][u]["category"] = u[start:end]

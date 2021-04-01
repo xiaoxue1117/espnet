@@ -11,6 +11,10 @@ epitran_code_dict = {
     "105": "tur-Latn",
     "106": "tgl-Latn",
     "107": "vie-Latn",
+    "302": "kaz-Cyrl",
+    "307": "amh-Ethi-pp",
+    "402": "jav-Latn",
+    "000": "eng-Latn",
 }
 
 epi = epitran.Epitran(epitran_code_dict[sys.argv[1]])
@@ -44,17 +48,18 @@ def get_epitran(line):
                 temp = [c for c in w]
                 words.append(" ".join(temp))
     else:
-        words = [" ".join(epi_fn(w)) for w in line.split(" ") if w not in non_langs]
+        words = [" ".join(epi_fn(w)) for w in line.strip().split(" ") if w not in non_langs]
     return " ".join([w for w in words if w != ""])
 
 
 lines = []
-prev_line = ""
-for line in sys.stdin:
-    if line == prev_line:
-        continue
-    lines.append(line)
-
+#prev_line = ""
+#for line in sys.stdin:
+#    if line == prev_line:
+#        continue
+#    lines.append(line)
+with open(sys.argv[4], "r", encoding="utf-8") as f:
+    lines = f.readlines()
 with mp.Pool(processes=20) as p:
     results = p.map(get_epitran, lines)
 

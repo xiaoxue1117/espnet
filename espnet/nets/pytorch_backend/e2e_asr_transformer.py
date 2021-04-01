@@ -47,6 +47,8 @@ from espnet.utils.fill_missing_args import fill_missing_args
 from espnet.nets.pytorch_backend.ctc_beam_search import ctcBeamSearch
 
 from espnet.nets.pytorch_backend.allo import AlloLayer
+from espnet.nets.pytorch_backend.allo_biphone_ctc import AlloBiCTCLayer
+from espnet.nets.pytorch_backend.conv_allo import ConvAlloLayer
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module.
@@ -138,19 +140,50 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             sm_allo = False
 
+        if hasattr(args, 'sm_phonemes'):
+            sm_phonemes = args.sm_phonemes
+        else:
+            sm_phonemes = False
+
         if hasattr(args, 'phoneme_bias'):
             phoneme_bias = args.phoneme_bias
         else:
             phoneme_bias = False
+
+        if hasattr(args, 'full_constrained'):
+            full_constrained = args.full_constrained
+        else:
+            full_constrained = False
+
+        if hasattr(args, 'sm_after'):
+            sm_after = args.sm_after
+        else:
+            sm_after = False
+
+        if hasattr(args, 'use_gtn_ctc'):
+            self.use_gtn_ctc = args.use_gtn_ctc
+        else:
+            self.use_gtn_ctc = False
+
+        if hasattr(args, 'use_conv_allo'):
+            self.use_conv_allo = args.use_conv_allo
+        else:
+            self.use_conv_allo = False
 
         self.alloW = torch.nn.ParameterDict()
         self.allodict = torch.nn.ModuleDict()
         for lid in alloWdict.keys():
             if self.am_type != "allomatbaseline":
                 mask = torch.Tensor(alloWdict[lid]).sum(0).bool().unsqueeze(0).unsqueeze(0)
-                self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid], args.trainable, args.redis, mask, lid, sm_allo, phoneme_bias)
+                if self.use_conv_allo:
+                    logging.warning("Use conv allo: " + str(self.use_conv_allo))
+                    self.allodict[lid] = ConvAlloLayer(allo_gtn=alloGdict[lid], idim=args.adim, n_phones=langdict['phone'], odim=langdict[lid], mask=mask, kernel=5)
+                elif self.use_gtn_ctc:
+                    self.allodict[lid] = AlloBiCTCLayer(alloGdict[lid], langdict[lid], langdict['phone'], args.trainable, args.redis, mask, lid, sm_allo, phoneme_bias)
+                else:
+                    self.allodict[lid] = AlloLayer(alloGdict[lid], langdict[lid], args.trainable, args.redis, mask, lid, sm_allo, phoneme_bias, sm_phonemes, full_constrained, sm_after)
+
                 logging.warning("Setting allograph weights as trainable:" + str(args.trainable))
-                logging.warning("Setting allograph redis as:" + str(args.redis))
             else:
                 self.alloW[lid] = torch.nn.Parameter(torch.Tensor(alloWdict[lid]))
                 if not hasattr(args, 'alloW_grad'):
@@ -228,23 +261,33 @@ class E2E(ASRInterface, torch.nn.Module):
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
 
-        if self.allotype == 'none':
-            hs_pad = self.phoneme_out[lid](hs_pad)
-            hs_pad = hs_pad.log_softmax(dim=-1)
-        else:
-            # phone logits
+        if self.use_conv_allo == True:
+            out = self.phone_out(hs_pad)
+            hs_pad = self.allodict[lid](out, hs_pad)    #out = phoneme_emissions
+            loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
+
+        elif self.use_gtn_ctc == True:
             hs_pad = self.phone_out(hs_pad)
-
-            if self.am_type != 'allomatbaseline':
-                # am CTC
-                hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
-            else:
-                hs_pad = hs_pad.unsqueeze(2) * self.alloW[lid].unsqueeze(0).unsqueeze(0)
-                hs_pad = hs_pad.sum(dim=-1)
+            loss_am = self.allodict[lid](hs_pad, ys_ph_pad)
+        else:
+            if self.allotype == 'none':
+                hs_pad = self.phoneme_out[lid](hs_pad)
                 hs_pad = hs_pad.log_softmax(dim=-1)
+            else:
+                # phone logits
+                hs_pad = self.phone_out(hs_pad)
 
-        # input is hs_pad which is already log_sm
-        loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
+                if self.am_type != 'allomatbaseline':
+                    # am CTC
+                    hs_pad = self.allodict[lid](hs_pad)    #hs_pad = phoneme_emissions
+                else:
+                    hs_pad = hs_pad.unsqueeze(2) * self.alloW[lid].unsqueeze(0).unsqueeze(0)
+                    #hs_pad = hs_pad.sum(dim=-1)
+                    hs_pad = hs_pad.max(dim=-1)[0]
+                    hs_pad = hs_pad.log_softmax(dim=-1)
+
+            # input is hs_pad which is already log_sm
+            loss_am, _ = self.ctc[lid](hs_pad, hs_len, ys_ph_pad)
 
         cer_ctc = None
         if not self.training and self.error_calculator is not None:
@@ -343,12 +386,17 @@ class E2E(ASRInterface, torch.nn.Module):
             align[1] = m_out.tolist()   # phonemes
         else:
             phone_hs = self.phone_out(hs_pad)
-            if self.am_type != 'allomatbaseline':
+            if self.use_conv_allo == True:
+                hs_pad = self.allodict[lid](phone_hs, hs_pad)    #out = phoneme_emissions
+            elif self.use_gtn_ctc == True:
+                hs_pad = self.allodict[cat].predict(phone_hs)
+            elif self.am_type != 'allomatbaseline':
                 # am CTC
                 hs_pad = self.allodict[cat](phone_hs, training=False)    #hs_pad = phoneme_emissions
             else:
                 hs_pad = phone_hs.unsqueeze(2) * self.alloW[cat].unsqueeze(0).unsqueeze(0)
-                hs_pad = hs_pad.sum(dim=-1)
+                #hs_pad = hs_pad.sum(dim=-1)
+                hs_pad = hs_pad.max(dim=-1)[0]
                 hs_pad = hs_pad.log_softmax(dim=-1)
 
             n_out = phone_hs.max(dim=-1)[1].squeeze()

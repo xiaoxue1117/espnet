@@ -16,6 +16,7 @@ def get_parser():
     parser.add_argument("--allphoneme-txt", required=True, type=str)
     parser.add_argument("--nlsyms-txt", required=True, type=str)
     parser.add_argument("--output", required=True, type=str)
+    parser.add_argument("--space", required=False, type=str, default="")
     return parser
 
 
@@ -138,11 +139,11 @@ def main(args):
     print("phones: " + str(len(phones)))
     phones = non_phones + phones
     print("non-phones + phones: " + str(len(phones)))
-    #with open(args.output + "phone_units.txt", "w", encoding="utf-8") as f:
-    #    i = 1
-    #    for p in phones:
-    #        f.write(p + " " + str(i) + "\n")
-    #        i += 1
+    with open(args.output + "phone_units"+args.space+ ".txt", "w", encoding="utf-8") as f:
+        i = 1
+        for p in phones:
+            f.write(p + " " + str(i) + "\n")
+            i += 1
 
     phones = ["<blank>"] + phones + ["<sos>"]
     print("<blank> + nonphones + phones + <sos>: " + str(len(phones)))
@@ -181,11 +182,11 @@ def main(args):
         #        f.write(p[0] + " " + p[1] + "\n")
         print(alloW.shape)
         print(alloW.sum(axis=-1))
-        #alloW.dump(args.output + "phonemap_" + lid)
+        alloW.dump(args.output + "phonemap" + args.space + "_" + lid)
 
         allo_gtn = mat2graph(alloW)
-        gtn.save(args.output + "phonegraph_" + lid, allo_gtn)
-        gtn.savetxt(args.output + "phonegraph_" + lid + ".txt", allo_gtn)
+        gtn.save(args.output + "phonegraph" + args.space+ "_" + lid, allo_gtn)
+        gtn.savetxt(args.output + "phonegraph"+ args.space+ "_" + lid + ".txt", allo_gtn)
         #gtn.save(args.output + "densephonegraph_" + lid, allo_gtn)
         #gtn.savetxt(args.output + "densephonegraph_" + lid + ".txt", allo_gtn)
 

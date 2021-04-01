@@ -18,7 +18,7 @@ class CTC(torch.nn.Module):
     :param bool reduce: reduce the CTC loss into a scalar
     """
 
-    def __init__(self, odim, eprojs, dropout_rate, ctc_type="warpctc", reduce=True):
+    def __init__(self, odim, eprojs, dropout_rate, ctc_type="builtin", reduce=True):
         super().__init__()
         self.dropout_rate = dropout_rate
         self.loss = None
@@ -33,6 +33,7 @@ class CTC(torch.nn.Module):
         )
         if ctc_type != self.ctc_type:
             logging.warning(f"CTC was set to {self.ctc_type} due to PyTorch version.")
+        #self.ctc_type = ctc_type
         if self.ctc_type == "builtin":
             reduction_type = "sum" if reduce else "none"
             self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type, zero_infinity=True)
@@ -68,7 +69,8 @@ class CTC(torch.nn.Module):
             return self.ctc_loss(th_pred, th_target, th_ilen, th_olen)
         elif self.ctc_type == "gtnctc":
             targets = [t.tolist() for t in th_target]
-            log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
+            #log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
+            log_probs = th_pred
             return self.ctc_loss(log_probs, targets, 0, "none")
         else:
             raise NotImplementedError
@@ -86,12 +88,13 @@ class CTC(torch.nn.Module):
         #ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
         #ys_hat = F.dropout(hs_pad, p=self.dropout_rate)
         ys_hat = hs_pad
-        ys_hat = ys_hat.transpose(0, 1)
+        if self.ctc_type != "gtnctc":
+            ys_hat = ys_hat.transpose(0, 1)
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
         olens = to_device(ys_hat,torch.LongTensor([len(s) for s in ys]))
         ys_pad = torch.cat(ys)
         hlens = hlens.long()
-        
+
         #count = 0
         #for o, h in zip(olens, hlens):
         #    if h < o:
@@ -100,6 +103,19 @@ class CTC(torch.nn.Module):
         #logging.warning("len is too short for: " + str(count / len(olens)) + "%")
 
         #self.loss = to_device(hs_pad, self.loss_fn(ys_hat, ys_pad, hlens, olens)).to(dtype=dtype)
+        dtype = ys_hat.dtype
+        if self.ctc_type == "gtnctc":
+            ys_pad = ys
+        if self.ctc_type == "warpctc" or dtype == torch.float16:
+            hlens = torch.from_numpy(np.fromiter(hlens, dtype=np.int32))
+            olens = torch.from_numpy(
+                np.fromiter((x.size(0) for x in ys), dtype=np.int32)
+            )
+            # zero padding for ys
+            ys_true = torch.cat(ys).cpu().int()  # batch x olen
+            # warpctc only supports float32
+            # torch.ctc does not support float16 (#1751)
+            ys_hat = ys_hat.to(dtype=torch.float32)
         self.loss = self.loss_fn(ys_hat, ys_pad, hlens, olens)
         if self.reduce:
             # NOTE: sum() is needed to keep consistency
