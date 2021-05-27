@@ -85,7 +85,11 @@ def initialize(model: torch.nn.Module, init: str):
             if hasattr(m, "espnet_initialization_fn"):
                 m.espnet_initialization_fn()
 
-        # TODO(xkc): Hacking wav2vec2 initialization
+        # TODO(xkc): Hacking s3prl_frontend and wav2vec2encoder initialization
+        if getattr(model, "frontend", None) and getattr(
+            model.frontend, "reload_pretrained_parameters", None
+        ):
+            model.frontend.reload_pretrained_parameters()
         if getattr(model, "encoder", None) and getattr(
             model.encoder, "reload_pretrained_parameters", None
         ):

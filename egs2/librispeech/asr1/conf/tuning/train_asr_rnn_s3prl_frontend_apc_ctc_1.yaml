@@ -1,0 +1,76 @@
+batch_type: numel
+# batch_bins: 15000000
+batch_bins: 15000000
+accum_grad: 2
+max_epoch: 100
+patience: none
+# The initialization method for model parameters
+init: xavier_uniform
+best_model_criterion:
+-   - valid
+    - acc
+    - max
+keep_nbest_models: 10
+freeze_param: [
+"frontend.upstream"
+]
+
+frontend: s3prl
+frontend_conf:
+    frontend_conf:
+        upstream: apc  # Note: If the upstream is changed, please change the input_size in the preencoder.
+    download_dir: ./hub
+
+preencoder: linear
+preencoder_conf:
+    input_size: 512  # Note: If the upstream is changed, please change this value accordingly.
+    output_size: 1024
+
+encoder: rnn
+encoder_conf:
+    hidden_size: 1024
+    output_size: 1024
+    num_layers: 2
+    use_projection: false
+    dropout: 0.2
+    subsample:
+        - 1
+        - 1
+
+decoder: rnn
+decoder_conf:
+    num_layers: 1
+    hidden_size: 1024
+    dropout: 0.2
+    att_conf:
+        adim: 1024
+
+model_conf:
+    ctc_weight: 1.0
+    lsm_weight: 0.1
+    length_normalized_loss: false
+
+optim: adam
+optim_conf:
+    lr: 0.001
+scheduler: ReduceLROnPlateau  #warmuplr
+scheduler_conf:
+    # warmup_steps: 25000
+    factor: 0.5
+    patience: 3
+
+specaug: specaug
+specaug_conf:
+    apply_time_warp: true
+    time_warp_window: 5
+    time_warp_mode: bicubic
+    apply_freq_mask: true
+    freq_mask_width_range:
+    - 0
+    - 40
+    num_freq_mask: 4
+    apply_time_mask: true
+    time_mask_width_range:
+    - 0
+    - 50
+    num_time_mask: 2
