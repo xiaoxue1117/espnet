@@ -1,6 +1,7 @@
 from argparse import Namespace
 import copy
 import logging
+import os
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -35,6 +36,7 @@ class S3prlFrontend(AbsFrontend):
         fs: Union[int, str] = 16000,
         frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
         download_dir: str = None,
+        multilayer_feature: bool = False,
     ):
         assert check_argument_types()
         super().__init__()
@@ -44,25 +46,49 @@ class S3prlFrontend(AbsFrontend):
         if download_dir is not None:
             torch.hub.set_dir(download_dir)
 
-        self.upstream = self._get_upstream(frontend_conf)
+        self.multilayer_feature = multilayer_feature
+        self.upstream, self.featurizer = self._get_upstream(frontend_conf)
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
         self.upstream_trainable = getattr(self.args, "upstream_trainable", False)
-        self.output_dim = self.upstream.get_output_dim()
+        self.output_dim = self.featurizer.output_dim
 
     def _get_upstream(self, frontend_conf):
-        # S3PRL upstream model
+        """Get S3PRL upstream model."""
         s3prl_args = base_s3prl_setup(
             Namespace(**frontend_conf, device="cpu"),
         )
-
-        assert getattr(self, "args", None) is None
-        assert getattr(self, "init_ckpt", None) is None
         self.args = s3prl_args
-        self.init_ckpt = {}
 
-        from downstream.runner import Runner  # S3PRL Runner
+        s3prl_path = None
+        python_path_list = os.environ["PYTHONPATH"].split(":")
+        for p in python_path_list:
+            if p.endswith("s3prl"):
+                s3prl_path = p
+                break
+        assert s3prl_path is not None
 
-        return Runner._get_upstream(self)
+        s3prl_upstream = torch.hub.load(
+            s3prl_path,
+            s3prl_args.upstream,
+            ckpt=s3prl_args.upstream_ckpt,
+            model_config=s3prl_args.upstream_model_config,
+            refresh=s3prl_args.upstream_refresh,
+            source="local"
+        ).to("cpu")
+
+        from upstream.interfaces import Featurizer
+
+        if self.multilayer_feature is None:
+            feature_selection = "last_hidden_state"
+        else:
+            feature_selection = "hidden_states"
+        s3prl_featurizer = Featurizer(
+            upstream=s3prl_upstream,
+            feature_selection=feature_selection,
+            upstream_device="cpu",
+        )
+        
+        return s3prl_upstream, s3prl_featurizer
 
     def output_size(self) -> int:
         return self.output_dim
@@ -76,8 +102,10 @@ class S3prlFrontend(AbsFrontend):
         else:
             with torch.no_grad():
                 feats = self.upstream(wavs)
-        input_feats = pad_list(feats, 0.0)
-        feats_lens = torch.tensor([f.shape[0] for f in feats], dtype=torch.long)
+        new_feats = self.featurizer(wavs, feats)
+
+        input_feats = pad_list(new_feats, 0.0)
+        feats_lens = torch.tensor([f.shape[0] for f in new_feats], dtype=torch.long)
 
         # Saving CUDA Memory
         del feats
