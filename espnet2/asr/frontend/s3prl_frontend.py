@@ -60,7 +60,7 @@ class S3prlFrontend(AbsFrontend):
         self.args = s3prl_args
 
         s3prl_path = None
-        python_path_list = os.environ["PYTHONPATH"].split(":")
+        python_path_list = os.environ.get("PYTHONPATH", "(None)").split(":")
         for p in python_path_list:
             if p.endswith("s3prl"):
                 s3prl_path = p
@@ -100,6 +100,7 @@ class S3prlFrontend(AbsFrontend):
         if self.upstream_trainable:
             feats = self.upstream(wavs)
         else:
+            self.upstream.eval()  # For Wav2Vec2, because of layer drop technique
             with torch.no_grad():
                 feats = self.upstream(wavs)
         new_feats = self.featurizer(wavs, feats)
