@@ -49,7 +49,7 @@ if "${torch_17_plus}" && "${python_36_plus}"; then
 
     # S3PRL Commit id when making this PR: `commit a6d2ae11c644c024cd096b3dc362f44dc91a51e5`
     # TODO(xuankai): it's temperarily a tagged version.
-    git clone https://github.com/s3prl/s3prl.git -b superb-v1
+    git clone https://github.com/s3prl/s3prl.git -b multiple-layer-extraction
 
 else
     echo "[WARNING] s3prl is not prepared for pytorch<1.7.0, python<3.6 now"
