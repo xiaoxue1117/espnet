@@ -37,6 +37,8 @@ class S3prlFrontend(AbsFrontend):
         frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
         download_dir: str = None,
         multilayer_feature: bool = False,
+        upstream_trainable: bool = False,
+        trainable_epoch: int = 0,
     ):
         assert check_argument_types()
         super().__init__()
@@ -47,9 +49,12 @@ class S3prlFrontend(AbsFrontend):
             torch.hub.set_dir(download_dir)
 
         self.multilayer_feature = multilayer_feature
+        self.upstream_trainable = upstream_trainable
+        self.trainable_epoch = trainable_epoch
         self.upstream, self.featurizer = self._get_upstream(frontend_conf)
+        if self.upstream.model.__class__.__name__ in ["Wav2Vec2Model", "HuberModel"]:
+            self.upstream.model.encoder.layerdrop = 0.0
         self.pretrained_params = copy.deepcopy(self.upstream.state_dict())
-        self.upstream_trainable = getattr(self.args, "upstream_trainable", False)
         self.output_dim = self.featurizer.output_dim
 
     def _get_upstream(self, frontend_conf):
@@ -73,7 +78,7 @@ class S3prlFrontend(AbsFrontend):
             ckpt=s3prl_args.upstream_ckpt,
             model_config=s3prl_args.upstream_model_config,
             refresh=s3prl_args.upstream_refresh,
-            source="local"
+            source="local",
         ).to("cpu")
 
         from upstream.interfaces import Featurizer
@@ -87,17 +92,17 @@ class S3prlFrontend(AbsFrontend):
             feature_selection=feature_selection,
             upstream_device="cpu",
         )
-        
+
         return s3prl_upstream, s3prl_featurizer
 
     def output_size(self) -> int:
         return self.output_dim
 
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
+        self, input: torch.Tensor, input_lengths: torch.Tensor, cur_epoch: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         wavs = [wav[: input_lengths[i]] for i, wav in enumerate(input)]
-        if self.upstream_trainable:
+        if self.upstream_trainable and cur_epoch >= self.trainable_epoch:
             feats = self.upstream(wavs)
         else:
             self.upstream.eval()  # For Wav2Vec2, because of layer drop technique

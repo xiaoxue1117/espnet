@@ -482,7 +482,7 @@ class Trainer:
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):
-                    retval = model(**batch)
+                    retval = model(**batch, cur_epoch=reporter.get_epoch())
 
                     # Note(kamo):
                     # Supporting two patterns for the returned value from the model
@@ -613,7 +613,10 @@ class Trainer:
                                 optimizer.step()
                             if isinstance(scheduler, AbsBatchStepScheduler):
                                 scheduler.step()
-                            optimizer.zero_grad()
+                for iopt, optimizer in enumerate(optimizers):
+                    if optim_idx is not None and iopt != optim_idx:
+                        continue
+                    optimizer.zero_grad()
 
                 # Register lr and train/load time[sec/step],
                 # where step refers to accum_grad * mini-batch
