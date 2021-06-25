@@ -80,7 +80,7 @@ class DefaultFrontend(AbsFrontend):
         return self.n_mels
 
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
+        self, input: torch.Tensor, input_lengths: torch.Tensor, cur_epoch: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # 1. Domain-conversion: e.g. Stft: time -> time-freq
         if self.stft is not None:

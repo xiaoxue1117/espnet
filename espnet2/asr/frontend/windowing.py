@@ -50,7 +50,7 @@ class SlidingWindow(AbsFrontend):
         self.padding = padding
 
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
+        self, input: torch.Tensor, input_lengths: torch.Tensor, cur_epoch: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Apply a sliding window on the input.
 

@@ -12,6 +12,6 @@ class AbsFrontend(torch.nn.Module, ABC):
 
     @abstractmethod
     def forward(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
+        self, input: torch.Tensor, input_lengths: torch.Tensor, cur_epoch: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         raise NotImplementedError
