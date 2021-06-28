@@ -52,7 +52,7 @@ def convert(jsonf, refs, hyps, num_spkrs=1):
 
         for x in j["utts"]:
             lid = x[:3]
-            if lid == "sw0" or lid == "en_" or lid == "sw_":
+            if lid == "sw0" or lid == "en_" or lid == "sw_" or lid == "fsh":
                 sp_idx = 21
             elif lid == "107" or lid == "402":
                 sp_idx = 8

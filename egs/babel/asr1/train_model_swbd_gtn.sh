@@ -242,6 +242,15 @@ if [ ${stage} -le 6 ] && [ ${stop_stage} -ge 6 ]; then
         #### use CPU for decoding
         ngpu=0
 
+        #asr_recog.py \
+        #--config ${decode_config} \
+        #--ngpu ${ngpu} \
+        #--batchsize 0 \
+        #--backend ${backend} \
+        #--recog-json ${feat_recog_dir}/split${nj}utt/data_ph_cat.1.json \
+        #--result-label ${expdir}/${decode_dir}/data_ph_cat.1.json \
+        #--model ${expdir}/results/${recog_model}  \
+        
         ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
             asr_recog.py \
             --config ${decode_config} \
@@ -301,6 +310,15 @@ if [ ${stage} -le 7 ] && [ ${stop_stage} -ge 7 ]; then
             --result-label ${expdir}/${decode_dir}/data_ph_cat.JOB.json \
             --model ${expdir}/results/${recog_model}  \
             #${extra_opts}
+        #asr_recog.py \
+        #--config ${decode_config} \
+        #--ngpu ${ngpu} \
+        #--batchsize 0 \
+        #--backend ${backend} \
+        #--recog-json ${feat_recog_dir}/split${nj}utt/data_ph_cat.1.json \
+        #--result-label ${expdir}/${decode_dir}/data_ph_cat.1.json \
+        #--model ${expdir}/results/${recog_model}  \
+        ##${extra_opts}
 
         local/score_sclite.sh --wer true --bpe ${nbpe} --bpemodel ${bpemodel}.model --nlsyms ${nlsyms} ${expdir}/${decode_dir} ${dict}
         local/score_sclite_ph_unseen.sh --nlsyms ${nlsyms} ${expdir}/${decode_dir}/ph
@@ -332,6 +350,57 @@ if [ ${stage} -le 8 ] && [ ${stop_stage} -ge 8 ]; then
         #    decode_dir=${decode_dir}_rnnlm_${lmtag}
         #fi
         feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
+
+        # split data
+        splitjson.py --parts ${nj} ${feat_recog_dir}/data_ph_cat.json
+
+        #### use CPU for decoding
+        ngpu=0
+
+        ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
+            asr_recog.py \
+            --config ${decode_config} \
+            --ngpu ${ngpu} \
+            --batchsize 0 \
+            --backend ${backend} \
+            --recog-json ${feat_recog_dir}/split${nj}utt/data_ph_cat.JOB.json \
+            --result-label ${expdir}/${decode_dir}/data_ph_cat.JOB.json \
+            --model ${expdir}/results/${recog_model}  \
+            #${extra_opts}
+
+        local/score_sclite.sh --wer true --bpe ${nbpe} --bpemodel ${bpemodel}.model --nlsyms ${nlsyms} ${expdir}/${decode_dir} ${dict}
+        local/score_sclite_ph.sh --nlsyms ${nlsyms} ${expdir}/${decode_dir}/ph
+
+        cp -r ${expdir}/${decode_dir} ${expdir}/${decode_dir}_ignoresp
+        local/score_sclite_ph_ignoresp.sh --nlsyms ${nlsyms} ${expdir}/${decode_dir}_ignoresp/ph 
+    #) &
+    #pids+=($!) # store background pids
+    done
+    #i=0; for pid in "${pids[@]}"; do wait ${pid} || ((++i)); done
+    #[ ${i} -gt 0 ] && echo "$0: ${i} background jobs are failed." && false
+    echo "Finished"
+fi
+
+if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ]; then
+    echo "stage 8: Decoding Test"
+    nj=15
+
+    #extra_opts=""
+    #if ${use_lm}; then
+    #  extra_opts="--rnnlm ${lmexpdir}/rnnlm.model.best ${extra_opts}"
+    #fi
+    
+    recog_model=model.last${n_average}_${snapshot_upper}.avg
+    echo "${recog_model}"
+    recog_set=rt03_trim
+    #pids=() # initialize pids
+    for rtask in ${recog_set}; do
+    #(
+        decode_dir=decode_${rtask}_$(basename ${decode_config%.*})_${recog_model}
+        #if ${use_lm}; then
+        #    decode_dir=${decode_dir}_rnnlm_${lmtag}
+        #fi
+        feat_recog_dir=${dumpdir}/${rtask}/
 
         # split data
         splitjson.py --parts ${nj} ${feat_recog_dir}/data_ph_cat.json

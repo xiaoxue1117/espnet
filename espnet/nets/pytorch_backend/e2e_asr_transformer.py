@@ -399,6 +399,38 @@ class E2E(ASRInterface, torch.nn.Module):
                 hs_pad = hs_pad.max(dim=-1)[0]
                 hs_pad = hs_pad.log_softmax(dim=-1)
 
+            # Mask language specific
+            #phone_hs = phone_hs.masked_fill(~self.allodict[cat].mask.to(phone_hs.device), float('-inf'))
+            #phone_hs = torch.nn.functional.log_softmax(phone_hs, dim=-1)
+
+            # Mask unseen
+            # tus
+            #phone_mask = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0])
+            # inu
+            #phone_mask = torch.tensor([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            #phone_mask_nob = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            #unmasked_cnt = sum(phone_mask_nob)
+            #phone_mask = (phone_mask == 1)
+            #phone_mask_nob = (phone_mask_nob == 1)
+            #phone_hs = torch.nn.functional.softmax(phone_hs, dim=-1)    # <b> 40 a 30 b 30
+            #phone_hs = phone_hs.masked_fill(~phone_mask.to(phone_hs.device), 0.0)  #<b> 40 a 0 b 30
+            #phone_hs2 = phone_hs.masked_fill(~phone_mask_nob.to(phone_hs.device), float('-inf'))  #<b> 40 a 0 b 30
+            #phone_hs2 = torch.nn.functional.log_softmax(phone_hs2, dim=-1)    # <b> 40 a 30 b 30
+            #phone_hs2[:,:,0] = phone_hs[:,:,0]
+            #phone_hs = torch.nn.functional.log_softmax(phone_hs2, dim=-1)    # <b> 40 a 30 b 30
+
+            #redis_amt = 1 - phone_hs.sum(dim=-1, keepdim=True)     # 30
+            #redis_amt = redis_amt / unmasked_cnt        # 30
+            #redis_amt = redis_amt * phone_mask_nob      # 0 0 30
+            #phone_hs = phone_hs + redis_amt           # 40 0 60
+
+            alpha = phone_hs.sum(dim=-1) - phone_hs[:,:,0].squeeze()
+            phone_hs = phone_hs.masked_fill(~phone_mask.to(phone_hs.device), float('-inf'))
+            beta = phone_hs.sum(dim=-1) - phone_hs[:,:,0].squeeze()
+            logging.warning(alpha.shape)
+            scale = (alpha - beta) / alpha
+            phone_hs[:,:,0] = phone_hs[:,:,0] * scale
+
             n_out = phone_hs.max(dim=-1)[1].squeeze()
             align[0] = n_out.tolist()   # phones
             m_out = hs_pad.max(dim=-1)[1].squeeze()
