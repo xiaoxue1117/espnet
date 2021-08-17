@@ -33,15 +33,29 @@ def main(args, token_dict, token_id_dict, shape_dict):
         data["utts"][u]["output"].append(temp_dict)
         data["utts"][u]["category"] = "000"
 
-    with open(args.output_json, "wb") as json_file:
-        json_file.write(
-                json.dumps(
-                    data, indent=4, ensure_ascii=False, sort_keys=True
-                ).encode("utf_8")
-        )
+    #with open(args.output_json, "wb") as json_file:
+    #    json_file.write(
+    #            json.dumps(
+    #                data, indent=4, ensure_ascii=False, sort_keys=True
+    #            ).encode("utf_8")
+    #    )
 
-inu_problems = {}
-tus_problems = {}
+problems = {}
+
+knowns = {}
+unks = {}
+
+def add_known(phone):
+    if phone in unks.keys():
+        knowns[phone] = knowns[phone] + 1
+    else:
+        knowns[phone] = 1
+
+def add_unk(phone):
+    if phone in unks.keys():
+        unks[phone] = unks[phone] + 1
+    else:
+        unks[phone] = 1
 
 def get_ph_dets(l):
     if len(l.strip().split(" ")) == 1:
@@ -54,16 +68,13 @@ def get_ph_dets(l):
     # this is hacked: tusom only has phones that are 1 char.
     if args.lang == "tus":
         for w in text.split(" "):
-            tmp = " ".join([c for c in w])
-            tmp_fixed = tmp
-            for problem in tus_problems.keys():
-                tmp_fixed = tmp_fixed.replace(problem, tus_problems[problem])
-            phones = tmp_fixed.split(" ")
-            for phone in phones:
+            for phone in w:
                 if phone in dictionary.keys():
                     tokenids.append(dictionary[phone])
+                    add_known(phone)
                 else:
                     tokenids.append(-1)
+                    add_unk(phone)
     # inuktitut data is a series of phones, space separated
     elif args.lang == "inu":
         for w in text.split(" "):
@@ -72,14 +83,16 @@ def get_ph_dets(l):
             else:
                 tmp = " ".join([c for c in w])
                 tmp_fixed = tmp
-                for problem in inu_problems.keys():
-                    tmp_fixed = tmp_fixed.replace(problem, inu_problems[problem])
+                for problem in problems.keys():
+                    tmp_fixed = tmp_fixed.replace(problem, problems[problem])
                 phones = tmp_fixed.split(" ")
                 for phone in phones:
                     if phone in dictionary.keys():
                         tokenids.append(dictionary[phone])
+                        add_known(phone)
                     else:
                         tokenids.append(-1)
+                        add_unk(phone)
 
     token = text
     token_id = tokenids
@@ -92,7 +105,7 @@ if __name__ == "__main__":
     with open(args.units, encoding="utf-8") as f:
         for l in f:
             try:
-                symbol, val = l.strip().split()
+                symbol, val = l.strip().split(" ")
             except:
                 symbol = ""
                 val = l.strip()
@@ -105,32 +118,25 @@ if __name__ == "__main__":
         for l in f:
             text_lines.append(l)
 
-    with open("/project/ocean/xinjianl/corpus/tusom/tusom_ipa/langs/ipa/units.txt", encoding="utf-8") as f:
-        for l in f:
-            unit, _ = l.split()
-            if len(unit) == 2:
-                unitsp = unit[0]+" "+unit[1]
-                tus_problems[unitsp] = unit
-            elif len(unit) == 2:
-                unitsp = unit[0]+" "+unit[1]+" "+unit[2]
-                tus_problems[unitsp] = unit
-
     with open("/project/ocean/xinjianl/corpus/iku/inuktitut_agg/langs/ipa/units.txt", encoding="utf-8") as f:
         for l in f:
             unit, _ = l.split()
             if len(unit) == 2:
                 unitsp = unit[0]+" "+unit[1]
-                inu_problems[unitsp] = unit
+                problems[unitsp] = unit
 
-    with mp.Pool(processes = 20) as p:
-        results = p.map(get_ph_dets, text_lines)
-    #for l in text_lines:
-    #    get_ph_dets(l)
+    #with mp.Pool(processes = 20) as p:
+    #    results = p.map(get_ph_dets, text_lines)
+    for l in text_lines:
+        get_ph_dets(l)
 
-    for result in results:
-        utt = result[0]
-        token_dict[utt] = result[1]
-        token_id_dict[utt] = result[2]
-        shape_dict[utt] = result[3]
+    print(unks)
+    print(knowns)
 
-    main(args,token_dict, token_id_dict, shape_dict)
+    #for result in results:
+    #    utt = result[0]
+    #    token_dict[utt] = result[1]
+    #    token_id_dict[utt] = result[2]
+    #    shape_dict[utt] = result[3]
+
+    #main(args,token_dict, token_id_dict, shape_dict)

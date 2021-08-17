@@ -9,41 +9,18 @@ import multiprocessing as mp
 
 def get_parser():
     parser = argparse.ArgumentParser(description="modify asr jsons to have two targets")
-    parser.add_argument("--input-json", required=True, type=str)
-    parser.add_argument("--output-json", required=True, type=str)
+    parser.add_argument("--output", required=True, type=str)
     parser.add_argument("--units", required=True, type=str)
     parser.add_argument("--text-file", required=True, type=str)
     parser.add_argument("--lang", required=True, type=str)
     return parser
 
 dictionary={}
+tus_problems={}
+inu_problems={}
 args = get_parser().parse_args()
 
-def main(args, token_dict, token_id_dict, shape_dict):
-
-    with open(args.input_json, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    for u in token_dict.keys():
-        temp_dict = copy.copy(data["utts"][u]["output"][0])
-        temp_dict["name"] = "target2"
-        temp_dict["token"] = token_dict[u]
-        temp_dict["tokenid"] = token_id_dict[u]
-        temp_dict["shape"] = shape_dict[u]
-        data["utts"][u]["output"].append(temp_dict)
-        data["utts"][u]["category"] = "000"
-
-    with open(args.output_json, "wb") as json_file:
-        json_file.write(
-                json.dumps(
-                    data, indent=4, ensure_ascii=False, sort_keys=True
-                ).encode("utf_8")
-        )
-
-inu_problems = {}
-tus_problems = {}
-
-def get_ph_dets(l):
+def get_line(l):
     if len(l.strip().split(" ")) == 1:
         utt = l.strip().split(" ",1)[0]
         text= ""
@@ -60,15 +37,17 @@ def get_ph_dets(l):
                 tmp_fixed = tmp_fixed.replace(problem, tus_problems[problem])
             phones = tmp_fixed.split(" ")
             for phone in phones:
-                if phone in dictionary.keys():
-                    tokenids.append(dictionary[phone])
-                else:
-                    tokenids.append(-1)
+                tokenids.append(phone)
+        #fix uttid
+        prefix = utt.split('_')[-1].replace('-','_')
+        utt=prefix+'-'+utt
+
     # inuktitut data is a series of phones, space separated
     elif args.lang == "inu":
         for w in text.split(" "):
             if w == "<sp>":
-                tokenids.append(dictionary[w])
+                continue
+                #tokenids.append(dictionary[w])
             else:
                 tmp = " ".join([c for c in w])
                 tmp_fixed = tmp
@@ -76,16 +55,13 @@ def get_ph_dets(l):
                     tmp_fixed = tmp_fixed.replace(problem, inu_problems[problem])
                 phones = tmp_fixed.split(" ")
                 for phone in phones:
-                    if phone in dictionary.keys():
-                        tokenids.append(dictionary[phone])
-                    else:
-                        tokenids.append(-1)
+                    tokenids.append(phone)
 
-    token = text
-    token_id = tokenids
-    shape = [len(tokenids) , len(dictionary)+2]
-    return (utt,token,token_id,shape)
+        #fix uttid
+        prefix = utt.split('_')[-1]
+        utt=prefix+'-'+utt
 
+    return ' '.join(tokenids) + ' (' + utt + ')\n'
 
 if __name__ == "__main__":
     # Get dictionary 
@@ -97,9 +73,7 @@ if __name__ == "__main__":
                 symbol = ""
                 val = l.strip()
             dictionary[symbol] = val
-    shape_dict = {}
-    token_dict = {}
-    token_id_dict = {}
+
     text_lines = []
     with open(args.text_file,encoding="utf-8") as f:
         for l in f:
@@ -122,15 +96,6 @@ if __name__ == "__main__":
                 unitsp = unit[0]+" "+unit[1]
                 inu_problems[unitsp] = unit
 
-    with mp.Pool(processes = 20) as p:
-        results = p.map(get_ph_dets, text_lines)
-    #for l in text_lines:
-    #    get_ph_dets(l)
-
-    for result in results:
-        utt = result[0]
-        token_dict[utt] = result[1]
-        token_id_dict[utt] = result[2]
-        shape_dict[utt] = result[3]
-
-    main(args,token_dict, token_id_dict, shape_dict)
+    with open(args.output, 'w', encoding='utf-8') as f:
+       for l in text_lines:
+           f.write(get_line(l))
