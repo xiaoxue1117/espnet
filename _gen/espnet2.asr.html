@@ -715,7 +715,7 @@ registered hooks while the latter silently ignores them.</p>
 <span id="id16"></span><h2>espnet2.asr.frontend.fused<a class="headerlink" href="#espnet2-asr-frontend-fused" title="Permalink to this headline">¶</a></h2>
 <span class="target" id="module-espnet2.asr.frontend.fused"></span><dl class="class">
 <dt id="espnet2.asr.frontend.fused.FusedFrontends">
-<em class="property">class </em><code class="sig-prename descclassname">espnet2.asr.frontend.fused.</code><code class="sig-name descname">FusedFrontends</code><span class="sig-paren">(</span><em class="sig-param">n_mels: int = 80</em>, <em class="sig-param">frontends=None</em>, <em class="sig-param">align_method='linear_projection'</em>, <em class="sig-param">proj_dim=100</em>, <em class="sig-param">fs='16k'</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/asr/frontend/fused.html#FusedFrontends"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.frontend.fused.FusedFrontends" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">espnet2.asr.frontend.fused.</code><code class="sig-name descname">FusedFrontends</code><span class="sig-paren">(</span><em class="sig-param">frontends=None</em>, <em class="sig-param">align_method='linear_projection'</em>, <em class="sig-param">proj_dim=100</em>, <em class="sig-param">fs=16000</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/espnet2/asr/frontend/fused.html#FusedFrontends"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.frontend.fused.FusedFrontends" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#espnet2.asr.frontend.abs_frontend.AbsFrontend" title="espnet2.asr.frontend.abs_frontend.AbsFrontend"><code class="xref py py-class docutils literal notranslate"><span class="pre">espnet2.asr.frontend.abs_frontend.AbsFrontend</span></code></a></p>
 <dl class="method">
 <dt id="espnet2.asr.frontend.fused.FusedFrontends.forward">
@@ -734,16 +734,6 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="method">
 <dt id="espnet2.asr.frontend.fused.FusedFrontends.output_size">
 <code class="sig-name descname">output_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="reference internal" href="../_modules/espnet2/asr/frontend/fused.html#FusedFrontends.output_size"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.frontend.fused.FusedFrontends.output_size" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="espnet2.asr.frontend.fused.FusedFrontends.output_size_default">
-<code class="sig-name descname">output_size_default</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="reference internal" href="../_modules/espnet2/asr/frontend/fused.html#FusedFrontends.output_size_default"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.frontend.fused.FusedFrontends.output_size_default" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="espnet2.asr.frontend.fused.FusedFrontends.output_size_s3prl">
-<code class="sig-name descname">output_size_s3prl</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; int<a class="reference internal" href="../_modules/espnet2/asr/frontend/fused.html#FusedFrontends.output_size_s3prl"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#espnet2.asr.frontend.fused.FusedFrontends.output_size_s3prl" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
