@@ -136,17 +136,6 @@ espnet2.asr.frontend.windowing
     :show-inheritance:
 
 
-.. _espnet2.asr.frontend.fusing_2_frontends:
-
-espnet2.asr.frontend.fusing_2_frontends
----------------------------------------
-
-.. automodule:: espnet2.asr.frontend.fusing_2_frontends
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
 .. _espnet2.asr.frontend.default:
 
 espnet2.asr.frontend.default
