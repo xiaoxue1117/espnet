@@ -65,7 +65,7 @@ class FairseqHubertEncoder(AbsEncoder):
         mask_channel_prob: float = 0.5,
         mask_channel_other: int = 0,
         mask_channel_selection: str = "static",
-        layerdrop: float = 0.1,
+        layerdrop: float = 0.11,
         feature_grad_mult: float = 0.0,
     ):
         assert check_argument_types()
