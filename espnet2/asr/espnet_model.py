@@ -63,6 +63,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
+        semi_supervised: bool = False,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -83,6 +84,8 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
+
+        self.semi_supervised=semi_supervised
 
         self.use_transducer_decoder = joint_network is not None
 
@@ -176,6 +179,11 @@ class ESPnetASRModel(AbsESPnetModel):
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
 
+        if self.semi_supervised:
+            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks = self.encode_mask(speech, speech_lengths)
+        assert 6==0, "{}  {}  {}".format(mlm_encoder_out.shape, mlm_encoder_out_lens.shape, mlm_masks)
+
+        # i think shape is [bs, len, vocab_size]
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
         loss_transducer, cer_transducer, wer_transducer = None, None, None
@@ -235,6 +243,11 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["acc"] = acc_att
             stats["cer"] = cer_att
             stats["wer"] = wer_att
+
+
+        argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
+        # use that to calculate MLM loss:
+        ## first : generate Masked encoder outputs
 
         # Collect total loss stats
         stats["loss"] = loss.detach()
@@ -308,6 +321,50 @@ class ESPnetASRModel(AbsESPnetModel):
         )
 
         return encoder_out, encoder_out_lens
+
+    def encode_mask(
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Frontend + Encoder. Note that this method is used by asr_inference.py
+
+        Args:
+            speech: (Batch, Length, ...)
+            speech_lengths: (Batch, )
+        """
+
+        # needs to return : mlm_encoder_out, mlm_encoder_out_lens, mlm_masks
+        with autocast(False):
+            # 1. Extract feats
+            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+
+            # 2. Data augmentation
+            if self.specaug is not None and self.training:
+                feats, feats_lengths = self.specaug(feats, feats_lengths)
+
+            # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+            if self.normalize is not None:
+                feats, feats_lengths = self.normalize(feats, feats_lengths)
+
+        # Pre-encoder, e.g. used for raw input data
+        if self.preencoder is not None:
+            feats, feats_lengths = self.preencoder(feats, feats_lengths)
+
+        # 4. Forward encoder
+        # feats: (Batch, Length, Dim)
+        # -> encoder_out: (Batch, Length2, Dim2)
+        encoder_out, encoder_out_lens, masks = self.encoder(feats, feats_lengths, independant_study=True)
+
+
+        assert encoder_out.size(0) == speech.size(0), (
+            encoder_out.size(),
+            speech.size(0),
+        )
+        assert encoder_out.size(1) <= encoder_out_lens.max(), (
+            encoder_out.size(),
+            encoder_out_lens.max(),
+        )
+
+        return encoder_out, encoder_out_lens, masks
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor

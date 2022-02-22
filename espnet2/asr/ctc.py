@@ -140,6 +140,7 @@ class CTC(torch.nn.Module):
         """
         # hs_pad: (B, L, NProj) -> ys_hat: (B, L, Nvocab)
         ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        self.argmax_ss = torch.argmax(ys_hat, dim=-1) # dim : (B, L, 1)
 
         if self.ctc_type == "gtnctc":
             # gtn expects list form for ys

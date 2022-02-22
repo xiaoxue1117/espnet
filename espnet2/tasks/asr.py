@@ -311,6 +311,12 @@ class ASRTask(AbsTask):
             default="13_15",
             help="The range of noise decibel level.",
         )
+        group.add_argument(
+            "--semi_supervised",
+            type=str2bool,
+            default=False,
+            help="independant study semi-supervised training",
+        )
 
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
@@ -493,6 +499,7 @@ class ASRTask(AbsTask):
             ctc=ctc,
             joint_network=joint_network,
             token_list=token_list,
+            semi_supervised=args.semi_supervised,
             **args.model_conf,
         )
 

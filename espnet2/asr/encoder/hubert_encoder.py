@@ -186,6 +186,8 @@ class FairseqHubertEncoder(AbsEncoder):
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
         prev_states: torch.Tensor = None,
+        independant_study: bool = False,
+
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward Hubert ASR Encoder.
 
@@ -208,13 +210,22 @@ class FairseqHubertEncoder(AbsEncoder):
         else:
             self.num_updates += 1
         with torch.no_grad() if not ft else contextlib.nullcontext():
-            enc_outputs = self.encoders(
-                xs_pad,
-                padding_mask=masks,
-                mask=self.apply_mask and self.training,
-                features_only=True,
-                output_layer=None,
-            )
+            if not independant_study:
+                enc_outputs = self.encoders(
+                    xs_pad,
+                    padding_mask=masks,
+                    mask=self.apply_mask and self.training,
+                    features_only=True,
+                    output_layer=None,
+                )
+            else :
+                enc_outputs = self.encoders(
+                    xs_pad,
+                    padding_mask=masks,
+                    mask=True,
+                    features_only=True,
+                    output_layer=None,
+                )
 
         xs_pad = enc_outputs["x"]  # (B,T,C),
         masks = enc_outputs["padding_mask"]  # (B, T)
@@ -230,6 +241,8 @@ class FairseqHubertEncoder(AbsEncoder):
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 
+        if independant_study:
+            return xs_pad, olens, masks
         return xs_pad, olens, None
 
     def reload_pretrained_parameters(self):
