@@ -317,6 +317,12 @@ class ASRTask(AbsTask):
             default=False,
             help="independant study semi-supervised training",
         )
+        parser.add_argument(
+            "--alpha_ss",
+            type=float,
+            default=0.1,
+            help="weight of the semi supervised MLM loss",
+        )
 
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
@@ -486,6 +492,11 @@ class ASRTask(AbsTask):
             odim=vocab_size, encoder_output_sizse=encoder_output_size, **args.ctc_conf
         )
 
+        # semi sup : 
+        if getattr(args, "semi_supervised", None) is not None:
+            semi_supervised=args.semi_supervised
+        else: 
+            semi_supervised=False
         # 8. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
@@ -499,7 +510,7 @@ class ASRTask(AbsTask):
             ctc=ctc,
             joint_network=joint_network,
             token_list=token_list,
-            semi_supervised=args.semi_supervised,
+            semi_supervised=semi_supervised,
             **args.model_conf,
         )
 

@@ -225,10 +225,13 @@ class FairseqHubertEncoder(AbsEncoder):
                     mask=True,
                     features_only=True,
                     output_layer=None,
+                    independant_study=True,
                 )
+                masks_full = enc_outputs["mask_indices"]
 
         xs_pad = enc_outputs["x"]  # (B,T,C),
         masks = enc_outputs["padding_mask"]  # (B, T)
+        
 
         # save gpu memory
         del enc_outputs
@@ -242,7 +245,7 @@ class FairseqHubertEncoder(AbsEncoder):
             xs_pad = self.after_norm(xs_pad)
 
         if independant_study:
-            return xs_pad, olens, masks
+            return xs_pad, olens, masks_full
         return xs_pad, olens, None
 
     def reload_pretrained_parameters(self):

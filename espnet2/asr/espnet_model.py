@@ -64,6 +64,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
         semi_supervised: bool = False,
+        alpha_ss: float = 0.1, 
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -84,8 +85,10 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
+        
 
         self.semi_supervised=semi_supervised
+        self.alpha_ss=alpha_ss
 
         self.use_transducer_decoder = joint_network is not None
 
@@ -241,15 +244,19 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["wer"] = wer_att
 
         if self.semi_supervised:
-            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks = self.encode_mask(speech, speech_lengths)
-            assert 6==0, "{}  {}  {}".format(mlm_encoder_out.shape, mlm_encoder_out_lens.shape, mlm_masks)
+            crit_loss = torch.nn.KLDivLoss(reduction='none')
+            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths)
             argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
             argmax_ss_len = self.ctc.argmax_ss_len
-            # use that to calculate MLM loss:
-            pred_ss = self.ctc.ctc_lo(F.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
-            loss_ss = torch.nn.functional.kl_div(pred_ss,argmax_ss_len)
-            assert 7==0, loss_ss
-
+            pred_ss = self.ctc.ctc_lo(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
+            one_hot_argmax_ss = torch.nn.functional.one_hot(argmax_ss,num_classes=1000)
+            loss_ss = crit_loss(pred_ss,one_hot_argmax_ss.float())
+            loss_ss = loss_ss.sum(dim=-1)
+            loss_ss_final = loss_ss[mlm_masks_and_non_pad] # ok c'est bon ca selectionne bien les bons
+            loss_ss_final= - loss_ss_final.sum()
+            #logging.info("loss semi supervised : {}, loss ctc : {}".format(loss_ss_final,loss_ctc))
+            loss = loss + self.alpha_ss*loss_ss_final
+            
         # Collect total loss stats
         stats["loss"] = loss.detach()
 
