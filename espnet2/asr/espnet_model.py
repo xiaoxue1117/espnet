@@ -179,10 +179,6 @@ class ESPnetASRModel(AbsESPnetModel):
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
 
-        if self.semi_supervised:
-            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks = self.encode_mask(speech, speech_lengths)
-        assert 6==0, "{}  {}  {}".format(mlm_encoder_out.shape, mlm_encoder_out_lens.shape, mlm_masks)
-
         # i think shape is [bs, len, vocab_size]
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
@@ -244,10 +240,15 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["cer"] = cer_att
             stats["wer"] = wer_att
 
-
-        argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
-        # use that to calculate MLM loss:
-        ## first : generate Masked encoder outputs
+        if self.semi_supervised:
+            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks = self.encode_mask(speech, speech_lengths)
+            assert 6==0, "{}  {}  {}".format(mlm_encoder_out.shape, mlm_encoder_out_lens.shape, mlm_masks)
+            argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
+            argmax_ss_len = self.ctc.argmax_ss_len
+            # use that to calculate MLM loss:
+            pred_ss = self.ctc.ctc_lo(F.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
+            loss_ss = torch.nn.functional.kl_div(pred_ss,argmax_ss_len)
+            assert 7==0, loss_ss
 
         # Collect total loss stats
         stats["loss"] = loss.detach()
@@ -501,6 +502,10 @@ class ESPnetASRModel(AbsESPnetModel):
             cer_att, wer_att = self.error_calculator(ys_hat.cpu(), ys_pad.cpu())
 
         return loss_att, acc_att, cer_att, wer_att
+
+
+
+
 
     def _calc_ctc_loss(
         self,
