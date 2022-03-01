@@ -243,7 +243,7 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["cer"] = cer_att
             stats["wer"] = wer_att
 
-        if self.semi_supervised:
+        if self.semi_supervised and (True or  self.encoder.num_updates > 20000):
             #crit_loss = torch.nn.KLDivLoss(reduction='none')
             crit_loss = torch.nn.CrossEntropyLoss(reduction='none') # is that problematic to not use reduction ? 
             mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths)

@@ -1,7 +1,7 @@
 batch_type: folded
-batch_size: 6
+batch_size: 2
 accum_grad: 1
-max_epoch: 100
+max_epoch: 60
 patience: none
 # The initialization method for model parameters
 init: xavier_uniform
@@ -21,7 +21,7 @@ encoder: hubert
 encoder_conf:
     output_size: 256
     normalize_before: false
-    freeze_finetune_updates: 10000
+    freeze_finetune_updates: 5000
     # if use espent-trained model
     #hubert_url: espnet
     #hubert_dir_path: ../../librispeech/ssl1/exp/pretrain_train_asr_hubert_base_960h_pretrain_it1_raw_iter1/valid.acc.best.pth

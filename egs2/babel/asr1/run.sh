@@ -11,7 +11,7 @@ recog=$lang
 
 nj=20
 train_set=train_${lang}_1h
-valid_set=dev_${lang}
+valid_set=dev_${lang}_small
 test_set=eval_${lang}_small
 
 #BASELINE CONFIG : 
@@ -41,7 +41,7 @@ speed_perturb_factors="1.1 0.9 1.0"
     --bpe_train_text "data/${train_set}/text" \
     --asr_config "${asr_config}" \
     --inference_config "${inference_config}" \
-    --inference_asr_model "latest.pth" \
+    --inference_asr_model "valid.loss.ave_10best.pth" \
     --train_set "${train_set}" \
     --valid_set "${valid_set}" \
     --test_sets "${test_set}" \
@@ -50,14 +50,14 @@ speed_perturb_factors="1.1 0.9 1.0"
     --speed_perturb_factors "${speed_perturb_factors}" \
     --ngpu 1 \
     --lang ${lang} \
-    --expdir exp\
+    --expdir exp_new\
     --dumpdir dump/dump_lid_${lang}\
     --lm_train_text "data/${train_set}/text" "$@"
 
 
 
-# sbatch -t 0 --exclude  tir-0-3,tir-1-23,tir-1-7,tir-1-11 --cpus-per-task=22  --mem=12G  --output=OUTPUTS/102_10_char.out  run_hubert.sh --stage 10  --stop_stage 10 
+# sbatch -t 0 --exclude  tir-0-17,tir-0-3,tir-1-7 --cpus-per-task=20  --mem=120G  run.sh --stage 10  --stop_stage 10 
 
-# sbatch -t 0 --exclude  tir-0-17,tir-0-3,tir-1-7 --cpus-per-task=2  --gres=gpu:TITANX:1 --mem=20G  run.sh --stage 11  --stop_stage 11 --asr_tag baseline_hubert
+# sbatch -t 0 --exclude  tir-0-17,tir-0-3,tir-1-7 --cpus-per-task=2  --gres=gpu:TITANX:1 --mem=20G  run.sh --stage 11  --stop_stage 11 --asr_tag CE_alpha0.1 --semi_supervised true --alpha_ss 0.1
 
-# sbatch -t 0 --exclude tir-0-3,tir-1-23,tir-1-7,tir-1-11  --cpus-per-task=20  --mem=120G  run_hubert.sh --stage 12  --stop_stage 13 --asr_tag continue_PT_iter2
+# sbatch -t 0 --exclude tir-0-17,tir-0-3,tir-1-7  --cpus-per-task=20  --mem=120G  run.sh --stage 12  --stop_stage 13 
