@@ -85,9 +85,10 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
-#        self.project_hubert=torch.nn.Linear(in_features=768, out_features=256)
+        self.project_hubert=torch.nn.Linear(in_features=768, out_features=256)
         self.MOE_n_experts=2
- #       self.MOE_proj=torch.nn.Linear(in_features=256, out_features=self.MOE_n_experts)
+        self.MOE_proj=torch.nn.Linear(in_features=256, out_features=self.MOE_n_experts)
+        # autre idée aussi : drop some frames --> mettre 3 experts
         self.use_transducer_decoder = joint_network is not None
         self.num_updates=0
         self.freeze_finetune_updates = freeze_finetune_updates

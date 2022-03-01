@@ -707,7 +707,6 @@ class Trainer:
         distributed = distributed_option.distributed
 
         model.eval()
-        DICO={}
         MAT=[]
         # [For distributed] Because iteration counts are not always equals between
         # processes, send stop-flag to the other processes if iterator is finished
@@ -737,8 +736,6 @@ class Trainer:
                 # Apply weighted averaging for stats.
                 # if distributed, this method can also apply all_reduce()
                 stats, weight = recursive_average(stats, weight, distributed)
-            DICO[L[0]]=loss.item()
-            logging.info("{} : {}".format(L[0],loss.item()))
             reporter.register(stats, weight)
             reporter.next()
 
@@ -746,11 +743,7 @@ class Trainer:
             if distributed:
                 iterator_stop.fill_(1)
                 torch.distributed.all_reduce(iterator_stop, ReduceOp.SUM)
-        import json
-        json_object = json.dumps(DICO, indent = 4)
-        with open("DATA_AUG_MODEL_BRIAN_SP.json", "w") as outfile:
-            outfile.write(json_object)
-            outfile.close()
+
         if store and hasattr(model.frontend, "align_method") and model.frontend.align_method == "elevator" : 
             ll=torch.cat(MAT, dim=0)
             torch.save(ll,"MOE_HUBERT/{}epoch.pth".format(ep))
