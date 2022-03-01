@@ -244,16 +244,23 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["wer"] = wer_att
 
         if self.semi_supervised:
-            crit_loss = torch.nn.KLDivLoss(reduction='none')
+            #crit_loss = torch.nn.KLDivLoss(reduction='none')
+            crit_loss = torch.nn.CrossEntropyLoss(reduction='none') # is that problematic to not use reduction ? 
             mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths)
             argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
+            
             argmax_ss_len = self.ctc.argmax_ss_len
             pred_ss = self.ctc.ctc_lo(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
-            one_hot_argmax_ss = torch.nn.functional.one_hot(argmax_ss,num_classes=1000)
-            loss_ss = crit_loss(pred_ss,one_hot_argmax_ss.float())
-            loss_ss = loss_ss.sum(dim=-1)
-            loss_ss_final = loss_ss[mlm_masks_and_non_pad] # ok c'est bon ca selectionne bien les bons
-            loss_ss_final= - loss_ss_final.sum()
+
+            pred_debug = torch.argmax(pred_ss, dim=-1)
+            blank_mask = torch.where(argmax_ss==0, False, True)
+            logging.info("argmax_ss {}".format(argmax_ss))
+            logging.info("pred {}".format(pred_debug))
+            
+            loss_ss = crit_loss(pred_ss.permute(0,2,1),argmax_ss)
+            
+            loss_ss_final = loss_ss[mlm_masks_and_non_pad & blank_mask] 
+            loss_ss_final=loss_ss_final.sum()
             #logging.info("loss semi supervised : {}, loss ctc : {}".format(loss_ss_final,loss_ctc))
             loss = loss + self.alpha_ss*loss_ss_final
             
