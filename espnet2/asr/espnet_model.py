@@ -1,3 +1,4 @@
+import contextlib
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 import logging
@@ -62,6 +63,7 @@ class ESPnetASRModel(AbsESPnetModel):
         report_wer: bool = True,
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
+        freeze_finetune_updates: int = 1000000000,
         extract_feats_in_collect_stats: bool = True,
     ):
         assert check_argument_types()
@@ -83,9 +85,12 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
-
+#        self.project_hubert=torch.nn.Linear(in_features=768, out_features=256)
+        self.MOE_n_experts=2
+ #       self.MOE_proj=torch.nn.Linear(in_features=256, out_features=self.MOE_n_experts)
         self.use_transducer_decoder = joint_network is not None
-
+        self.num_updates=0
+        self.freeze_finetune_updates = freeze_finetune_updates
         self.error_calculator = None
 
         if self.use_transducer_decoder:
@@ -151,6 +156,7 @@ class ESPnetASRModel(AbsESPnetModel):
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
         text_lengths: torch.Tensor,
+        store: bool=False, path: str="",
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
 
@@ -172,9 +178,22 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # for data-parallel
         text = text[:, : text_lengths.max()]
-
+       
+        stop_ft = self.freeze_finetune_updates <= self.num_updates
+        if self.num_updates <= self.freeze_finetune_updates:
+            self.num_updates += 1
+        elif stop_ft and self.num_updates == self.freeze_finetune_updates + 1:
+            self.num_updates += 1
+            logging.info("Stop tuning MOE parameters")
+        else:
+            self.num_updates += 1
+       
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator" and store):
+            encoder_out, encoder_out_lens, mat_moe = self.encode(speech, speech_lengths, stop_ft,store)
+            self.mat_moe=mat_moe
+        else:
+            encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
@@ -239,6 +258,14 @@ class ESPnetASRModel(AbsESPnetModel):
         # Collect total loss stats
         stats["loss"] = loss.detach()
 
+
+        if False and hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator" :
+            loss_ctc_hub, _ = self._calc_ctc_loss(
+                self.feats_hubert, self.feats_lengths_hubert, text, text_lengths
+            )
+            logging.info("ctc hubert : ",loss_ctc_hub)
+            loss = loss + 0.1*loss_ctc_hub
+
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((loss, stats, batch_size), loss.device)
         return loss, stats, weight
@@ -251,7 +278,13 @@ class ESPnetASRModel(AbsESPnetModel):
         text_lengths: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
         if self.extract_feats_in_collect_stats:
-            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+            if (
+                hasattr(self.frontend, "align_method")
+                and self.frontend.align_method == "elevator"
+            ):
+                feats, feats_lengths, feats_hubert, feats_lengths_hubert  = self._extract_feats(speech, speech_lengths)
+            else :
+                feats, feats_lengths = self._extract_feats(speech, speech_lengths)
         else:
             # Generate dummy stats if extract_feats_in_collect_stats is False
             logging.warning(
@@ -263,7 +296,7 @@ class ESPnetASRModel(AbsESPnetModel):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, stop_ft: bool=False, store: bool=False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
@@ -272,16 +305,47 @@ class ESPnetASRModel(AbsESPnetModel):
             speech_lengths: (Batch, )
         """
         with autocast(False):
-            # 1. Extract feats
-            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+            if (
+                hasattr(self.frontend, "align_method")
+                and self.frontend.align_method == "elevator"
+            ):
+                # 1. Extract feats
+                feats, feats_lengths, feats_hubert, feats_lengths_hubert  = self._extract_feats(speech, speech_lengths)
 
-            # 2. Data augmentation
-            if self.specaug is not None and self.training:
-                feats, feats_lengths = self.specaug(feats, feats_lengths)
+                # 2. Data augmentation
+                if self.specaug is not None and self.training:
+                    feats, feats_lengths = self.specaug(feats, feats_lengths)
+                    feats_hubert, feats_lengths_hubert = self.specaug(feats_hubert, feats_lengths_hubert)
+                # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+                if self.normalize is not None:
+                    feats, feats_lengths = self.normalize(feats, feats_lengths)
+                    feats_hubert, feats_lengths_hubert = self.normalize(feats_hubert, feats_lengths_hubert)
+                # Pre-encoder, e.g. used for raw input data but here used as a linear layer only ! 
+                feats_hubert = self.project_hubert(feats_hubert)
+                self.feats_hubert=feats_hubert
+                self.feats_lengths_hubert=feats_lengths_hubert
+                
+                # mettre la gate ICI sur MFCC only :
+                with torch.no_grad() if stop_ft else contextlib.nullcontext(): 
+                    MOE_weights = self.MOE_proj(self.feats_hubert)
+                    #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
+                    a,b,c=MOE_weights.shape
+                    MOE_weights = MOE_weights.reshape(a,b,c//2,2)
+                    MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
+                #assert 6==0, MOE_weights.shape
 
-            # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
-            if self.normalize is not None:
-                feats, feats_lengths = self.normalize(feats, feats_lengths)
+
+            else:
+                # 1. Extract feats
+                feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+
+                # 2. Data augmentation
+                if self.specaug is not None and self.training:
+                    feats, feats_lengths = self.specaug(feats, feats_lengths)
+
+                # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+                if self.normalize is not None:
+                    feats, feats_lengths = self.normalize(feats, feats_lengths)
 
         # Pre-encoder, e.g. used for raw input data
         if self.preencoder is not None:
@@ -290,6 +354,7 @@ class ESPnetASRModel(AbsESPnetModel):
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
+        #assert 6==0
         encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
 
         # Post-encoder, e.g. NLU
@@ -307,6 +372,27 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out_lens.max(),
         )
 
+        if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
+            # fusion part, just weighted sum with an alpha here !! 
+            # drop few frames : 
+            #logging.info("{} {}".format(encoder_out.shape,feats_hubert.shape))
+            m = min(feats_hubert.shape[1],encoder_out.shape[1])
+            diff = max(feats_hubert.shape[1]-m, encoder_out.shape[1]-m)
+            assert diff<8, "we had to drop {} frames, this seems to be too much".format(diff)
+            encoder_out, feats_hubert, MOE_weights = encoder_out[:,:m,:], feats_hubert[:,:m,:], MOE_weights[:,:m,:]
+           # commented for version with Dimension MOE 
+           # a,b,c = encoder_out.shape
+           # w1, w2 = MOE_weights[:,:,0].expand(c,a,b), MOE_weights[:,:,1].expand(c, a, b)
+           # w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
+            w1, w2 = MOE_weights[:,:,:,0], MOE_weights[:,:,:,1]
+            #alpha=self.frontend.alpha
+            #encoder_out = alpha*feats_hubert + (1-alpha)*encoder_out
+           # logging.info("hubert/mfcc weights : {}".format(MOE_weights))
+            
+            encoder_out = w1*feats_hubert + w2*encoder_out
+            if store:
+                return encoder_out, encoder_out_lens, MOE_weights
+
         return encoder_out, encoder_out_lens
 
     def _extract_feats(
@@ -322,7 +408,25 @@ class ESPnetASRModel(AbsESPnetModel):
             #  e.g. STFT and Feature extract
             #       data_loader may send time-domain signal in this case
             # speech (Batch, NSamples) -> feats: (Batch, NFrames, Dim)
-            feats, feats_lengths = self.frontend(speech, speech_lengths)
+
+            if (
+                hasattr(self.frontend, "align_method")
+                and self.frontend.align_method == "elevator"
+            ):
+                (
+                    feats,
+                    feats_lengths,
+                    feats_hubert,
+                    feats_lengths_hubert,
+                ) = self.frontend(speech, speech_lengths)
+                return (
+                    feats,
+                    feats_lengths,
+                    feats_hubert,
+                    feats_lengths_hubert,
+                )
+            else:
+                feats, feats_lengths = self.frontend(speech, speech_lengths)
         else:
             # No frontend and no feature extract
             feats, feats_lengths = speech, speech_lengths
