@@ -746,7 +746,7 @@ class Trainer:
 
         if store and hasattr(model.frontend, "align_method") and model.frontend.align_method == "elevator" : 
             ll=torch.cat(MAT, dim=0)
-            torch.save(ll,"MOE_HUBERT/{}epoch.pth".format(ep))
+            torch.save(ll,"{}/{}epoch.pth".format(model.frontend.store_moe_path,ep))
 
     @classmethod
     @torch.no_grad()
