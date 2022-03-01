@@ -189,7 +189,7 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             self.num_updates += 1
 
-        assert 120==90, "victoire"
+
         # 1. Encoder
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator" and store):
             encoder_out, encoder_out_lens, mat_moe = self.encode(speech, speech_lengths, stop_ft,store)
