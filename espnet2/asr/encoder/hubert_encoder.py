@@ -220,7 +220,6 @@ class FairseqHubertEncoder(AbsEncoder):
                     output_layer=None,
                 )
             else :
-                assert 7==0, layer
                 enc_outputs = self.encoders(
                     xs_pad,
                     padding_mask=masks,
