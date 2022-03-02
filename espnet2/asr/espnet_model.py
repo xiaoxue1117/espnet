@@ -87,14 +87,13 @@ class ESPnetASRModel(AbsESPnetModel):
         self.postencoder = postencoder
         self.encoder = encoder
         self.project_hubert=torch.nn.Linear(in_features=768, out_features=256)
-        self.MOE_n_experts=2
+        self.layer_selection_hubert = [int(x) for x in layer_selection_hubert.split()]
+        self.MOE_n_experts = 1 + len(self.layer_selection_hubert)
         self.MOE_proj=torch.nn.Linear(in_features=256, out_features=self.MOE_n_experts)
         # autre idée aussi : drop some frames --> mettre 3 experts
         self.use_transducer_decoder = joint_network is not None
         self.num_updates=0
         self.freeze_finetune_updates = freeze_finetune_updates
-        self.layer_selection_hubert=[int(x) for x in layer_selection_hubert.split()]
-        assert 7==9, self.layer_selection_hubert
         self.error_calculator = None
 
         if self.use_transducer_decoder:
@@ -324,7 +323,9 @@ class ESPnetASRModel(AbsESPnetModel):
                     feats_hubert, feats_lengths_hubert = self.normalize(feats_hubert, feats_lengths_hubert)
                 # Pre-encoder, e.g. used for raw input data but here used as a linear layer only ! 
                 feats_hubert = self.project_hubert(feats_hubert)
-                self.feats_hubert=feats_hubert
+                a,b,c = feats_hubert.shape
+                assert 9==8, a
+                self.feats_hubert=feats_hubert.reshape(13,)
                 self.feats_lengths_hubert=feats_lengths_hubert
                 
                 # mettre la gate ICI sur MFCC only :
@@ -332,7 +333,7 @@ class ESPnetASRModel(AbsESPnetModel):
                     MOE_weights = self.MOE_proj(self.feats_hubert)
                     #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                     a,b,c=MOE_weights.shape
-                    MOE_weights = MOE_weights.reshape(a,b,c//2,2)
+                    MOE_weights = MOE_weights.reshape(a,b,c//self.MOE_n_experts,self.MOE_n_experts)
                     MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                 #assert 6==0, MOE_weights.shape
 
