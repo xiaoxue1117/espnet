@@ -324,9 +324,9 @@ class ESPnetASRModel(AbsESPnetModel):
                 # Pre-encoder, e.g. used for raw input data but here used as a linear layer only ! 
                 feats_hubert = self.project_hubert(feats_hubert)
                 a,b,c = feats_hubert.shape
-                assert 9==8, a
-                self.feats_hubert=feats_hubert.reshape(13,)
-                self.feats_lengths_hubert=feats_lengths_hubert
+                self.feats_hubert=feats_hubert.view(13,-1,b,c)
+                self.feats_lengths_hubert=feats_lengths_hubert.view(13,-1,b,c)
+                assert 6==0, self.feats_hubert.shape
                 
                 # mettre la gate ICI sur MFCC only :
                 with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
