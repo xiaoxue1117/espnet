@@ -261,7 +261,7 @@ class ESPnetASRModel(AbsESPnetModel):
             
             loss_ss_final = loss_ss[mlm_masks_and_non_pad & blank_mask] 
             loss_ss_final=loss_ss_final.sum()
-            #logging.info("loss semi supervised : {}, loss ctc : {}".format(loss_ss_final,loss_ctc))
+            logging.info("loss semi supervised : {}, loss ctc : {}".format(loss_ss_final,loss_ctc))
             loss = loss + self.alpha_ss*loss_ss_final
             
         # Collect total loss stats
