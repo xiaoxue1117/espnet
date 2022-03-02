@@ -187,6 +187,7 @@ class FairseqHubertEncoder(AbsEncoder):
         ilens: torch.Tensor,
         prev_states: torch.Tensor = None,
         independant_study: bool = False,
+        layer: int=12,
 
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward Hubert ASR Encoder.
@@ -224,7 +225,7 @@ class FairseqHubertEncoder(AbsEncoder):
                     padding_mask=masks,
                     mask=True,
                     features_only=True,
-                    output_layer=None,
+                    output_layer=layer,
                     independant_study=True,
                 )
                 masks_full = enc_outputs["mask_indices"]
