@@ -387,16 +387,18 @@ class ESPnetASRModel(AbsESPnetModel):
             diff = max(feats_hubert.shape[1]-m, encoder_out.shape[1]-m)
             assert diff<8, "we had to drop {} frames, this seems to be too much".format(diff)
             encoder_out, feats_hubert, MOE_weights = encoder_out[:,:m,:], feats_hubert[:,:m,:], MOE_weights[:,:m,:]
-           # commented for version with Dimension MOE 
-           # a,b,c = encoder_out.shape
-           # w1, w2 = MOE_weights[:,:,0].expand(c,a,b), MOE_weights[:,:,1].expand(c, a, b)
-           # w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
-            w1, w2 = MOE_weights[:,:,:,0], MOE_weights[:,:,:,1]
+
+            w_fbank = MOE_weights[:,:,:,0]
+            w_hub = [MOE_weights[1+i] for i in range(len(self.layer_selection_hubert))]
+
+            #w1, w2 = MOE_weights[:,:,:,0], MOE_weights[:,:,:,1]
             #alpha=self.frontend.alpha
             #encoder_out = alpha*feats_hubert + (1-alpha)*encoder_out
            # logging.info("hubert/mfcc weights : {}".format(MOE_weights))
-            
-            encoder_out = w1*feats_hubert + w2*encoder_out
+
+            encoder_out = w_fbank * encoder_out
+            for i, lay in enumerate(self.layer_selection_hubert):
+                encoder_out += w_hub[i] * feats_hubert[lay]
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
 
