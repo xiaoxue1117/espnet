@@ -324,8 +324,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 # Pre-encoder, e.g. used for raw input data but here used as a linear layer only ! 
                 feats_hubert = self.project_hubert(feats_hubert)
                 a,b,c = feats_hubert.shape
-                assert 6==0, a
-                self.feats_hubert=feats_hubert.view(13,-1,b,c)
+                self.feats_hubert=feats_hubert.view(13,a,b,-1)
                 self.feats_lengths_hubert=feats_lengths_hubert.view(13,-1,b,c)
 
                 #self.feats_hubert=self.feats_hubert[x for x in self.layer_selection_hubert]
