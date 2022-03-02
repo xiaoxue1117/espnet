@@ -64,7 +64,8 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
         semi_supervised: bool = False,
-        alpha_ss: float = 0.1, 
+        alpha_ss: float = 0.1,
+        layerMLM: int = 12,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -89,6 +90,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
         self.semi_supervised=semi_supervised
         self.alpha_ss=alpha_ss
+        self.layerMLM=layerMLM
 
         self.use_transducer_decoder = joint_network is not None
 
@@ -246,7 +248,7 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.semi_supervised and (True or  self.encoder.num_updates > 20000):
             #crit_loss = torch.nn.KLDivLoss(reduction='none')
             crit_loss = torch.nn.CrossEntropyLoss(reduction='none') # is that problematic to not use reduction ? 
-            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths)
+            mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
             argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
             
             argmax_ss_len = self.ctc.argmax_ss_len
@@ -338,7 +340,7 @@ class ESPnetASRModel(AbsESPnetModel):
         return encoder_out, encoder_out_lens
 
     def encode_mask(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, layer: int=12
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
@@ -367,7 +369,7 @@ class ESPnetASRModel(AbsESPnetModel):
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
-        encoder_out, encoder_out_lens, masks = self.encoder(feats, feats_lengths, independant_study=True)
+        encoder_out, encoder_out_lens, masks = self.encoder(feats, feats_lengths, independant_study=True, layer=layer)
 
 
         assert encoder_out.size(0) == speech.size(0), (

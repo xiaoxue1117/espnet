@@ -321,7 +321,13 @@ class ASRTask(AbsTask):
             "--alpha_ss",
             type=float,
             default=0.1,
-            help="weight of the semi supervised MLM loss",
+            help="weight of the semi-supervised MLM loss",
+        )
+        parser.add_argument(
+            "--layerMLM",
+            type=int,
+            default=12,
+            help="output layer for the semi-supervised MLM loss",
         )
 
         for class_choices in cls.class_choices_list:
@@ -331,7 +337,7 @@ class ASRTask(AbsTask):
 
     @classmethod
     def build_collate_fn(
-        cls, args: argparse.Namespace, train: bool
+            cls, args: argparse.Namespace, train: bool
     ) -> Callable[
         [Collection[Tuple[str, Dict[str, np.ndarray]]]],
         Tuple[List[str], Dict[str, torch.Tensor]],
@@ -342,7 +348,7 @@ class ASRTask(AbsTask):
 
     @classmethod
     def build_preprocess_fn(
-        cls, args: argparse.Namespace, train: bool
+            cls, args: argparse.Namespace, train: bool
     ) -> Optional[Callable[[str, Dict[str, np.array]], Dict[str, np.ndarray]]]:
         assert check_argument_types()
         if args.use_preprocessor:
@@ -377,7 +383,7 @@ class ASRTask(AbsTask):
 
     @classmethod
     def required_data_names(
-        cls, train: bool = True, inference: bool = False
+            cls, train: bool = True, inference: bool = False
     ) -> Tuple[str, ...]:
         if not inference:
             retval = ("speech", "text")
@@ -388,7 +394,7 @@ class ASRTask(AbsTask):
 
     @classmethod
     def optional_data_names(
-        cls, train: bool = True, inference: bool = False
+            cls, train: bool = True, inference: bool = False
     ) -> Tuple[str, ...]:
         retval = ()
         assert check_return_type(retval)
@@ -408,7 +414,7 @@ class ASRTask(AbsTask):
         else:
             raise RuntimeError("token_list must be str or list")
         vocab_size = len(token_list)
-        logging.info(f"Vocabulary size: {vocab_size }")
+        logging.info(f"Vocabulary size: {vocab_size}")
 
         # 1. frontend
         if args.input_size is None:
@@ -494,9 +500,18 @@ class ASRTask(AbsTask):
 
         # semi sup : 
         if getattr(args, "semi_supervised", None) is not None:
-            semi_supervised=args.semi_supervised
-        else: 
-            semi_supervised=False
+            semi_supervised = args.semi_supervised
+        else:
+            semi_supervised = False
+        if getattr(args, "alpha_ss", None) is not None:
+            alpha_ss = args.alpha_ss
+        else:
+            alpha_ss = 0.0
+        if getattr(args, "layerMLM", None) is not None:
+            layerMLM = args.layerMLM
+        else:
+            layerMLM = 0.0
+
         # 8. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
@@ -511,6 +526,8 @@ class ASRTask(AbsTask):
             joint_network=joint_network,
             token_list=token_list,
             semi_supervised=semi_supervised,
+            alpha_ss=alpha_ss,
+            layerMLM=layerMLM,
             **args.model_conf,
         )
 
