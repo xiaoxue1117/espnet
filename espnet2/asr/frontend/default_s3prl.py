@@ -243,7 +243,6 @@ class Default_S3prl_Frontend(AbsFrontend):
             upstream=s3prl_upstream,
             feature_selection=feature_selection,
             upstream_device="cpu",
-            layer_selection=layer_selection,
         )
 
         return s3prl_upstream, s3prl_featurizer
