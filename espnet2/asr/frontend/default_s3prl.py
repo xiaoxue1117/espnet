@@ -50,6 +50,7 @@ class Default_S3prl_Frontend(AbsFrontend):
         download_dir: str = None,
         multilayer_feature: bool = False,
         align_method: str = "linear_projection",
+        store_moe_path: str = "MOE_weights",
         alpha: float = 0.5,
     ):
 
@@ -96,6 +97,7 @@ class Default_S3prl_Frontend(AbsFrontend):
         self.n_mels = n_mels
         self.align_method = align_method
         self.alpha=alpha
+        self.store_moe_path=store_moe_path
 
         ######### S3PRL RELATED
         if download_dir is not None:
@@ -241,6 +243,7 @@ class Default_S3prl_Frontend(AbsFrontend):
             upstream=s3prl_upstream,
             feature_selection=feature_selection,
             upstream_device="cpu",
+            layer_selection=layer_selection,
         )
 
         return s3prl_upstream, s3prl_featurizer

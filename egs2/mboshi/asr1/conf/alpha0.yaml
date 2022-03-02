@@ -20,6 +20,7 @@ frontend_conf:
   multilayer_feature: False
   align_method: elevator  
   alpha: 0.0
+  store_moe_path: TEST_PATH
 
 # decoder related
 decoder: transformer
