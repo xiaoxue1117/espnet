@@ -17,7 +17,7 @@ frontend_conf:
   frontend_conf_s3prl:
       upstream: hubert_base  # Note: If the upstream is changed, please change the input_size in the preencoder  
   download_dir: ./hub
-  multilayer_feature: True
+  multilayer_feature: False
   align_method: elevator  
   alpha: 0.0
 

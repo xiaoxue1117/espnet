@@ -43,6 +43,7 @@ from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
+from espnet2.asr.frontend.default_s3prl import Default_S3prl_Frontend
 from espnet2.asr.frontend.fused import FusedFrontends
 from espnet2.asr.frontend.s3prl import S3prlFrontend
 from espnet2.asr.frontend.windowing import SlidingWindow
@@ -55,8 +56,6 @@ from espnet2.asr.preencoder.linear import LinearProjection
 from espnet2.asr.preencoder.sinc import LightweightSincConvs
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.specaug.specaug import SpecAug
-from espnet2.asr.transducer.joint_network import JointNetwork
-from espnet2.asr.transducer.transducer_decoder import TransducerDecoder
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
 from espnet2.layers.utterance_mvn import UtteranceMVN
@@ -80,6 +79,7 @@ frontend_choices = ClassChoices(
         default=DefaultFrontend,
         sliding_window=SlidingWindow,
         s3prl=S3prlFrontend,
+        default_s3prl=Default_S3prl_Frontend,
         fused=FusedFrontends,
     ),
     type_check=AbsFrontend,
@@ -87,9 +87,7 @@ frontend_choices = ClassChoices(
 )
 specaug_choices = ClassChoices(
     name="specaug",
-    classes=dict(
-        specaug=SpecAug,
-    ),
+    classes=dict(specaug=SpecAug),
     type_check=AbsSpecAug,
     default=None,
     optional=True,
@@ -148,7 +146,6 @@ decoder_choices = ClassChoices(
         dynamic_conv=DynamicConvolutionTransformerDecoder,
         dynamic_conv2d=DynamicConvolution2DTransformerDecoder,
         rnn=RNNDecoder,
-        transducer=TransducerDecoder,
     ),
     type_check=AbsDecoder,
     default="rnn",
@@ -216,18 +213,18 @@ class ASRTask(AbsTask):
             default=None,
             help="The number of input dimension of the feature",
         )
+        group.add_argument(
+            "--freeze_finetune_updates",
+            type=int_or_none,
+            default=10000000,
+            help="The number of tuning steps for MOE",
+        )
 
         group.add_argument(
             "--ctc_conf",
             action=NestedDictAction,
             default=get_default_kwargs(CTC),
             help="The keyword arguments for CTC class.",
-        )
-        group.add_argument(
-            "--joint_net_conf",
-            action=NestedDictAction,
-            default=None,
-            help="The keyword arguments for joint network class.",
         )
         group.add_argument(
             "--model_conf",
@@ -261,6 +258,35 @@ class ASRTask(AbsTask):
             type=str_or_none,
             help="non_linguistic_symbols file path",
         )
+
+        parser.add_argument(
+            "--continual",
+            type=str_or_none,
+            default=None,
+            help="continual learning method",
+        )
+
+        parser.add_argument(
+            "--continual_store_gradients",
+            type=str2bool,
+            default=False,
+            help="continual learning step : storing the gradients of the previous model",
+        )
+
+        parser.add_argument(
+            "--path_gradients",
+            type=str_or_none,
+            default="",
+            help="continual learning path for saving/loading fisher info",
+        )
+
+        parser.add_argument(
+            "--alpha_ewc",
+            type=float_or_none,
+            default=1,
+            help="continual learning hyperparam",
+        )
+
         parser.add_argument(
             "--cleaner",
             type=str_or_none,
@@ -453,32 +479,24 @@ class ASRTask(AbsTask):
         # 5. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)
 
-        if args.decoder == "transducer":
-            decoder = decoder_class(
-                vocab_size,
-                embed_pad=0,
-                **args.decoder_conf,
-            )
-
-            joint_network = JointNetwork(
-                vocab_size,
-                encoder.output_size(),
-                decoder.dunits,
-                **args.joint_net_conf,
-            )
-        else:
-            decoder = decoder_class(
-                vocab_size=vocab_size,
-                encoder_output_size=encoder_output_size,
-                **args.decoder_conf,
-            )
-
-            joint_network = None
+        decoder = decoder_class(
+            vocab_size=vocab_size,
+            encoder_output_size=encoder_output_size,
+            **args.decoder_conf,
+        )
 
         # 6. CTC
         ctc = CTC(
             odim=vocab_size, encoder_output_sizse=encoder_output_size, **args.ctc_conf
         )
+
+        # 7. RNN-T Decoder (Not implemented)
+        rnnt_decoder = None
+        
+        if getattr(args, "freeze_finetune_updates", None) is not None:
+            ffu = args.freeze_finetune_updates
+        else :
+            ffu = 10000000
 
         # 8. Build model
         model = ESPnetASRModel(
@@ -491,8 +509,9 @@ class ASRTask(AbsTask):
             postencoder=postencoder,
             decoder=decoder,
             ctc=ctc,
-            joint_network=joint_network,
             token_list=token_list,
+            joint_network=None,
+            freeze_finetune_updates=ffu,
             **args.model_conf,
         )
 
