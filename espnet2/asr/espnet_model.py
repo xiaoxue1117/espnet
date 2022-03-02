@@ -328,7 +328,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 #self.feats_lengths_hubert=feats_lengths_hubert.view(13,a,b,-1)
 
                 #self.feats_hubert=self.feats_hubert[x for x in self.layer_selection_hubert]
-                assert 6==0, self.feats_hubert.shape
+                #assert 6==0, self.feats_hubert.shape
 
                 feats_hubert = self.project_hubert(feats_hubert)
                 
