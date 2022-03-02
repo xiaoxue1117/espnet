@@ -64,6 +64,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         freeze_finetune_updates: int = 1000000000,
+        layer_selection_hubert: str = "12",
         extract_feats_in_collect_stats: bool = True,
     ):
         assert check_argument_types()
@@ -92,6 +93,8 @@ class ESPnetASRModel(AbsESPnetModel):
         self.use_transducer_decoder = joint_network is not None
         self.num_updates=0
         self.freeze_finetune_updates = freeze_finetune_updates
+        self.layer_selection_hubert=[int(x) for x in layer_selection_hubert.split()]
+        assert 7==9, self.layer_selection_hubert
         self.error_calculator = None
 
         if self.use_transducer_decoder:
@@ -307,12 +310,9 @@ class ESPnetASRModel(AbsESPnetModel):
             speech_lengths: (Batch, )
         """
         with autocast(False):
-            if (
-                hasattr(self.frontend, "align_method")
-                and self.frontend.align_method == "elevator"
-            ):
+            if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
                 # 1. Extract feats
-                feats, feats_lengths, feats_hubert, feats_lengths_hubert  = self._extract_feats(speech, speech_lengths)
+                feats, feats_lengths, feats_hubert, feats_lengths_hubert = self._extract_feats(speech, speech_lengths)
 
                 # 2. Data augmentation
                 if self.specaug is not None and self.training:
@@ -328,7 +328,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 self.feats_lengths_hubert=feats_lengths_hubert
                 
                 # mettre la gate ICI sur MFCC only :
-                with torch.no_grad() if stop_ft else contextlib.nullcontext(): 
+                with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
                     MOE_weights = self.MOE_proj(self.feats_hubert)
                     #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                     a,b,c=MOE_weights.shape

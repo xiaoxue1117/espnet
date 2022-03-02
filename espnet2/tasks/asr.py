@@ -221,6 +221,13 @@ class ASRTask(AbsTask):
         )
 
         group.add_argument(
+            "--layer_selection_hubert",
+            type=str_or_none,
+            default=None,
+            help="The hubert layers we want for MOE",
+        )
+
+        group.add_argument(
             "--ctc_conf",
             action=NestedDictAction,
             default=get_default_kwargs(CTC),
@@ -498,6 +505,11 @@ class ASRTask(AbsTask):
         else :
             ffu = 10000000
 
+        if getattr(args, "layer_selection_hubert", None) is not None:
+            llh = args.layer_selection_hubert
+        else :
+            ffu = "12"
+
         # 8. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
@@ -512,6 +524,7 @@ class ASRTask(AbsTask):
             token_list=token_list,
             joint_network=None,
             freeze_finetune_updates=ffu,
+            layer_selection_hubert=llh,
             **args.model_conf,
         )
 
