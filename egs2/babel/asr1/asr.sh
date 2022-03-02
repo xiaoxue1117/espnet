@@ -70,6 +70,7 @@ ngram_num=3
 
 semi_supervised=false
 alpha_ss=0.1
+layerMLM=12
 
 # Language model related
 use_lm=true       # Use language model for ASR decoding.
@@ -1110,6 +1111,7 @@ if ! "${skip_train}"; then
                 --valid_shape_file "${asr_stats_dir}/valid/text_shape.${token_type}" \
                 --resume true \
                 --semi_supervised "${semi_supervised}" \
+                --layerMLM "${layerMLM}" \
                 --alpha_ss "${alpha_ss}" \
                 --init_param ${pretrained_model} \
                 --ignore_init_mismatch ${ignore_init_mismatch} \
