@@ -510,7 +510,7 @@ class ASRTask(AbsTask):
         if getattr(args, "layerMLM", None) is not None:
             layerMLM = args.layerMLM
         else:
-            layerMLM = 0.0
+            layerMLM = 12
 
         # 8. Build model
         model = ESPnetASRModel(
