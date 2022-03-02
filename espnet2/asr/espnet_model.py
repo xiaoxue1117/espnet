@@ -328,7 +328,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 self.feats_hubert=feats_hubert.view(13,-1,b,c)
                 self.feats_lengths_hubert=feats_lengths_hubert.view(13,-1,b,c)
 
-                self.feats_hubert=self.feats_hubert[x for x in self.layer_selection_hubert]
+                #self.feats_hubert=self.feats_hubert[x for x in self.layer_selection_hubert]
                 assert 6==0, self.feats_hubert.shape
                 
                 # mettre la gate ICI sur MFCC only :
