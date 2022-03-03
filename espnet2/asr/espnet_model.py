@@ -399,7 +399,7 @@ class ESPnetASRModel(AbsESPnetModel):
             #assert 9==0, (w_fbank.shape, w_hub[0].shape)
             encoder_out = w_fbank * encoder_out
             for i, lay in enumerate(self.layer_selection_hubert):
-                encoder_out += w_hub[i] * feats_hubert[lay]
+                encoder_out += w_hub[i] * self.feats_hubert[lay]
             assert 3==0, "okok"
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
