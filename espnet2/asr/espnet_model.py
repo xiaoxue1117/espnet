@@ -403,7 +403,7 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out = w_fbank * encoder_out
             for i, lay in enumerate(self.layer_selection_hubert):
                 encoder_out += w_hub[i] * feats_hubert[lay]
-            assert 3==0, "okok"
+
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
 
