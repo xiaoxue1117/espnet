@@ -388,7 +388,7 @@ class ESPnetASRModel(AbsESPnetModel):
             diff = max(feats_hubert.shape[1]-m, encoder_out.shape[1]-m)
             assert diff<8, "we had to drop {} frames, this seems to be too much".format(diff)
             encoder_out, feats_hubert, MOE_weights = encoder_out[:,:m,:], self.feats_hubert[:,:m,:], MOE_weights[:,m,:]
-
+            assert 7==0, MOE_weights.shape
             w_fbank = MOE_weights[:,:,:,0]
             w_hub = [MOE_weights[:,:,:,1+i] for i in range(len(self.layer_selection_hubert))]
 
