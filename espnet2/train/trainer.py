@@ -724,7 +724,7 @@ class Trainer:
             
             if store and hasattr(model.frontend, "align_method") and model.frontend.align_method == "elevator" : 
                 retval= model(store=store, path=path, **batch)
-                MAT.append(model.mat_moe.reshape((-1,2)))
+                MAT.append(model.mat_moe)
             else : 
                 retval = model(**batch)
             if isinstance(retval, dict):
