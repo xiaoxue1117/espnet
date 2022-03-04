@@ -256,8 +256,8 @@ class ESPnetASRModel(AbsESPnetModel):
 
             pred_debug = torch.argmax(pred_ss, dim=-1)
             blank_mask = torch.where(argmax_ss==0, False, True)
-            logging.info("argmax_ss {}".format(argmax_ss))
-            logging.info("pred {}".format(pred_debug))
+            #logging.info("argmax_ss {}".format(argmax_ss))
+            #logging.info("pred {}".format(pred_debug))
             
             loss_ss = crit_loss(pred_ss.permute(0,2,1),argmax_ss)
             
