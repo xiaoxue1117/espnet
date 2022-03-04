@@ -388,8 +388,8 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out, feats_hubert, MOE_weights = encoder_out[:,:m,:], self.feats_hubert[:,:,:m,:], MOE_weights[:,:m,:]
 
             a, b, c = encoder_out.shape
-            w_fbank = MOE_weights[:,:,0].expand(c,a,b).permute(1,2,0)
-            w_hub = [MOE_weights[:,:,1+i].expand(c,a,b).permute(1,2,0) for i in range(len(self.layer_selection_hubert))]
+            #w_fbank = MOE_weights[:,:,0].expand(c,a,b).permute(1,2,0)
+            #w_hub = [MOE_weights[:,:,1+i].expand(c,a,b).permute(1,2,0) for i in range(len(self.layer_selection_hubert))]
 
             #w1, w2 = MOE_weights[:,:,:,0], MOE_weights[:,:,:,1]
             #alpha=self.frontend.alpha
@@ -397,12 +397,10 @@ class ESPnetASRModel(AbsESPnetModel):
            # logging.info("hubert/mfcc weights : {}".format(MOE_weights))
             #assert 9==0, (w_fbank.shape, w_hub[0].shape)
 
-            # w1, w2 = MOE_weights[:,:,0].expand(c,a,b), MOE_weights[:,:,1].expand(c, a, b)
-            # w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
+            w1, w2 = MOE_weights[:,:,0].expand(c,a,b), MOE_weights[:,:,1].expand(c, a, b)
+            w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
 
-            encoder_out = w_fbank * encoder_out
-            for i, lay in enumerate(self.layer_selection_hubert):
-                encoder_out += w_hub[i] * feats_hubert[lay]
+            encoder_out = w1*feats_hubert + w2*encoder_out
 
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
