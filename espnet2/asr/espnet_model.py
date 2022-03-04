@@ -86,7 +86,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
-        
+
 
         self.semi_supervised=semi_supervised
         self.alpha_ss=alpha_ss
@@ -150,6 +150,7 @@ class ESPnetASRModel(AbsESPnetModel):
             self.ctc = None
         else:
             self.ctc = ctc
+        self.ctc_lo_bis = torch.nn.Linear(self.ctc.eprojs, self.ctc.odim)
 
         self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
 
@@ -249,10 +250,9 @@ class ESPnetASRModel(AbsESPnetModel):
             #crit_loss = torch.nn.KLDivLoss(reduction='none')
             crit_loss = torch.nn.CrossEntropyLoss(reduction='none') # is that problematic to not use reduction ? 
             mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
-            argmax_ss = self.ctc.argmax_ss    # dim : (B, L, 1)
-            
-            argmax_ss_len = self.ctc.argmax_ss_len
-            pred_ss = self.ctc.ctc_lo(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
+            argmax_ss = self.ctc.argmax(encoder_out)    # dim : (B, L, 1)
+
+            pred_ss = self.ctc_lo_bis(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
 
             pred_debug = torch.argmax(pred_ss, dim=-1)
             blank_mask = torch.where(argmax_ss==0, False, True)

@@ -28,6 +28,8 @@ class CTC(torch.nn.Module):
         assert check_argument_types()
         super().__init__()
         eprojs = encoder_output_sizse
+        self.eprojs=eprojs
+        self.odim=odim
         self.dropout_rate = dropout_rate
         self.ctc_lo = torch.nn.Linear(eprojs, odim)
         self.ctc_type = ctc_type
@@ -140,8 +142,8 @@ class CTC(torch.nn.Module):
         """
         # hs_pad: (B, L, NProj) -> ys_hat: (B, L, Nvocab)
         ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
-        self.argmax_ss = torch.argmax(ys_hat, dim=-1) # dim : (B, L, 1)
-        self.argmax_ss_len = hlens
+        #self.argmax_ss = torch.argmax(ys_hat, dim=-1) # dim : (B, L, 1)
+        #self.argmax_ss_len = hlens
 
         if self.ctc_type == "gtnctc":
             # gtn expects list form for ys
