@@ -334,7 +334,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 
                 # mettre la gate ICI sur MFCC only :
                 with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
-                    MOE_weights = self.MOE_proj(self.feats_hubert[-1,:,:,:])
+                    MOE_weights = self.MOE_proj(self.feats_hubert)
                     #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                     #assert 6==0, MOE_weights.shape
                     MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
