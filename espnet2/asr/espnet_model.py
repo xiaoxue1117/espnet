@@ -399,7 +399,8 @@ class ESPnetASRModel(AbsESPnetModel):
 
             w1, w2 = MOE_weights[:,:,0].expand(c,a,b), MOE_weights[:,:,1].expand(c, a, b)
             w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
-
+            logging.info(feats_hubert.shape)
+            logging.info(encoder_out.shape)
             encoder_out = w1*feats_hubert + w2*encoder_out
 
             if store:
