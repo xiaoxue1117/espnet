@@ -323,14 +323,14 @@ class ESPnetASRModel(AbsESPnetModel):
                     feats_hubert, feats_lengths_hubert = self.normalize(feats_hubert, feats_lengths_hubert)
                 # Pre-encoder, e.g. used for raw input data but here used as a linear layer only ! 
 
-                a,b,c = feats_hubert.shape
-                self.feats_hubert=feats_hubert.view(13,a,b,-1)
+                #a,b,c = feats_hubert.shape
+                #self.feats_hubert=feats_hubert.view(13,a,b,-1)
                 #self.feats_lengths_hubert=feats_lengths_hubert.view(13,a,b,-1)
 
                 #self.feats_hubert=self.feats_hubert[x for x in self.layer_selection_hubert]
 
 
-                self.feats_hubert = self.project_hubert(self.feats_hubert)
+                self.feats_hubert = self.project_hubert(feats_hubert)
                 
                 # mettre la gate ICI sur MFCC only :
                 with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
