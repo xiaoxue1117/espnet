@@ -508,7 +508,7 @@ class ASRTask(AbsTask):
         if getattr(args, "layer_selection_hubert", None) is not None:
             llh = args.layer_selection_hubert
         else :
-            ffu = "12"
+            llh = "12"
 
         # 8. Build model
         model = ESPnetASRModel(
