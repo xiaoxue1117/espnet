@@ -381,7 +381,7 @@ class ESPnetASRModel(AbsESPnetModel):
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
             # fusion part, just weighted sum with an alpha here !! 
             # drop few frames : 
-            #logging.info("{} {}".format(encoder_out.shape,feats_hubert.shape))
+            logging.info("{} {}".format(encoder_out.shape,feats_hubert.shape))
             m = min(feats_hubert.shape[1],encoder_out.shape[1])
             diff = max(feats_hubert.shape[1]-m, encoder_out.shape[1]-m)
             assert diff<8, "we had to drop {} frames, this seems to be too much".format(diff)
