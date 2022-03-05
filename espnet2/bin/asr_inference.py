@@ -245,6 +245,8 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, _ = self.asr_model.encode(**batch)
+
+        # ici j'ai les weights
         assert len(enc) == 1, len(enc)
 
         # c. Passed the encoder result and the beam search
@@ -420,6 +422,7 @@ def inference(
             # N-best list of (text, token, token_int, hyp_object)
             try:
                 results = speech2text(**batch)
+                logging.info(f"I {keys} ")
             except TooShortUttError as e:
                 logging.warning(f"Utterance {keys} {e}")
                 hyp = Hypothesis(score=0.0, scores={}, states={}, yseq=[])
