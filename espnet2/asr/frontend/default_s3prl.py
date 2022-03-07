@@ -379,7 +379,7 @@ class Default_S3prl_Frontend(AbsFrontend):
             # assert 9 == 5 , "{}    , {}   ,   {}   ,    {}".format(input_feats_default.shape, self.n_mels, input_feats_s3prl.shape, self.output_dim_s3prl )
             assert (
                 input_feats_default.shape[-1] == 80
-                and input_feats_s3prl.shape[-1] == 1024
+                and (input_feats_s3prl.shape[-1] == 1024 or input_feats_s3prl.shape[-1] == 768)
             ), "{}   ,    {}".format(
                 input_feats_default.shape[-1], input_feats_s3prl.shape[-1]
             )
