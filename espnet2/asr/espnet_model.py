@@ -337,7 +337,7 @@ class ESPnetASRModel(AbsESPnetModel):
                     MOE_weights = self.MOE_proj(self.feats_hubert)
                     #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                     #assert 6==0, MOE_weights.shape
-                    MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
+                    MOE_weights=torch.nn.functional.log_softmax(MOE_weights, dim=-1)
                 #assert 6==0, MOE_weights.shape
 
 
