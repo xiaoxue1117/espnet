@@ -326,16 +326,13 @@ class Default_S3prl_Frontend(AbsFrontend):
         with torch.no_grad():
             feats = self.upstream(wavs)
         feats = self.featurizer(wavs, feats)
-
         if self.args.tile_factor != 1:
             feats = self._tile_representations(feats)
-
         input_feats = pad_list(feats, 0.0)
         feats_lens = torch.tensor([f.shape[0] for f in feats], dtype=torch.long)
 
         # Saving CUDA Memory
         del feats
-
         return input_feats, feats_lens
 
     def forward(
@@ -379,7 +376,6 @@ class Default_S3prl_Frontend(AbsFrontend):
             # assert 9 == 5 , "{}    , {}   ,   {}   ,    {}".format(input_feats_default.shape, self.n_mels, input_feats_s3prl.shape, self.output_dim_s3prl )
             assert (
                 input_feats_default.shape[-1] == 80
-                and (input_feats_s3prl.shape[-1] == 1024 or input_feats_s3prl.shape[-1] == 768)
             ), "{}   ,    {}".format(
                 input_feats_default.shape[-1], input_feats_s3prl.shape[-1]
             )
@@ -419,7 +415,6 @@ class Default_S3prl_Frontend(AbsFrontend):
             # assert 9 == 5 , "{}    , {}   ,   {}   ,    {}".format(input_feats_default.shape, self.n_mels, input_feats_s3prl.shape, self.output_dim_s3prl )
             assert (
                 input_feats_default.shape[-1] == 80
-                and input_feats_s3prl.shape[-1] == 1024
             ), "{}   ,    {}".format(
                 input_feats_default.shape[-1], input_feats_s3prl.shape[-1]
             )
