@@ -190,7 +190,7 @@ class Default_S3prl_Frontend(AbsFrontend):
                 in_features=self.n_mels,
                 out_features=self.factor_for_fbanks * self.n_mels,
             )
-            self.moe_layer = torch.nn.linear(
+            self.moe_layer = torch.nn.Linear(
                 in_features=self.n_mels, out_features=2,
             )
             self.apply_frontend_moe_on=apply_frontend_moe_on
