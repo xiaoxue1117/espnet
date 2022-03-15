@@ -455,7 +455,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
             if (
                 hasattr(self.frontend, "align_method")
-                and self.frontend.align_method == "elevator"
+                and (self.frontend.align_method == "elevator" or self.frontend.align_method == "encoder_linear_fusion")
             ):
                 (
                     feats,
