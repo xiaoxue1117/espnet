@@ -222,7 +222,7 @@ class ASRTask(AbsTask):
 
         group.add_argument(
             "--apply_moe_on",
-            type=int_or_none,
+            type=str_or_none,
             default="hubert",
             help="on which feature applying MOE",
         )
