@@ -406,6 +406,7 @@ class Default_S3prl_Frontend(AbsFrontend):
             else:
                 moe_weights = self.moe_layer(input_feats_default_final)
             a, b, c = input_feats_s3prl_final.shape
+            assert 9==0, moe_weights.shape
             w1, w2 = moe_weights[:, :, 0].expand(c, a, b), moe_weights[:, :, 1].expand(c, a, b)
             w1, w2 = w1.permute(1, 2, 0), w2.permute(1, 2, 0)
 
