@@ -97,8 +97,8 @@ class ESPnetASRModel(AbsESPnetModel):
 
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "encoder_linear_fusion"):
             self.project_hubert = torch.nn.Linear(in_features=self.frontend.output_size_s3prl(),
-                                                  out_features=self.encoder._output_size())
-            self.project_final = torch.nn.Linear(in_features=2*self.encoder._output_size(), out_features=self.encoder._output_size())
+                                                  out_features=self.encoder._output_size)
+            self.project_final = torch.nn.Linear(in_features=2*self.encoder._output_size, out_features=self.encoder._output_size)
 
         # autre idée aussi : drop some frames --> mettre 3 experts
         self.use_transducer_decoder = joint_network is not None
