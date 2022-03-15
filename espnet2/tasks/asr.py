@@ -221,6 +221,13 @@ class ASRTask(AbsTask):
         )
 
         group.add_argument(
+            "--apply_moe_on",
+            type=int_or_none,
+            default="hubert",
+            help="on which feature applying MOE",
+        )
+
+        group.add_argument(
             "--layer_selection_hubert",
             type=str_or_none,
             default=None,
@@ -510,6 +517,11 @@ class ASRTask(AbsTask):
         else :
             llh = "12"
 
+        if getattr(args, "apply_moe_on", None) is not None:
+            apply_moe_on = args.apply_moe_on
+        else :
+            apply_moe_on="hubert"
+
         # 8. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
@@ -525,6 +537,7 @@ class ASRTask(AbsTask):
             joint_network=None,
             freeze_finetune_updates=ffu,
             layer_selection_hubert=llh,
+            apply_moe_on=apply_moe_on,
             **args.model_conf,
         )
 

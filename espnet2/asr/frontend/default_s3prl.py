@@ -52,6 +52,7 @@ class Default_S3prl_Frontend(AbsFrontend):
         align_method: str = "linear_projection",
         store_moe_path: str = "MOE_weights",
         alpha: float = 0.5,
+        apply_frontend_moe_on: str = "hubert",
     ):
 
         assert check_argument_types()
@@ -179,6 +180,22 @@ class Default_S3prl_Frontend(AbsFrontend):
                 self.n_mels, self.factor_for_fbanks * self.n_mels, batch_first=True
             )
 
+        # frontend_moe
+        elif self.align_method == "frontend_moe":
+            self.lstm_align_s3prl = torch.nn.LSTM(
+                self.output_dim_s3prl,
+                self.factor_for_s3prl * self.n_mels,
+                batch_first=True,
+            )
+            self.lstm_align_default = torch.nn.LSTM(
+                self.n_mels, self.factor_for_fbanks * self.n_mels, batch_first=True
+            )
+            self.moe_layer = torch.nn.LSTM(
+                self.n_mels, 2, batch_first=True
+            )
+            self.apply_frontend_moe_on=apply_frontend_moe_on
+
+
     #######################################
     ##   default frontend functions
     #######################################
@@ -276,7 +293,7 @@ class Default_S3prl_Frontend(AbsFrontend):
     #######################################
 
     def output_size(self) -> int:
-        if self.align_method == "elevator":
+        if self.align_method == "elevator" or self.align_method=="frontend_moe" or self.align_method=="encoder_linear_fusion" :
             return self.output_size_default()
         return self.output_size_default() + self.output_size_s3prl()  # a verifier
 
@@ -345,13 +362,55 @@ class Default_S3prl_Frontend(AbsFrontend):
             input_feats_s3prl, feats_lens_s3prl = self.forward_s3prl(
                 input, input_lengths
             )
-        if self.align_method == "elevator":  # a modif celle la avec les gcd
+        if self.align_method == "elevator" or self.align_method == "encoder_linear_fusion":  # a modif celle la avec les gcd
             return (
                 input_feats_default,
                 feats_lens_default,
                 input_feats_s3prl,
                 feats_lens_s3prl,
             )
+
+        if self.align_method == "frontend_moe":  # a modif celle la avec les gcd
+            assert (
+                    input_feats_default.shape[-1] == 80
+            ), "{}   ,    {}".format(
+                input_feats_default.shape[-1], input_feats_s3prl.shape[-1]
+            )
+
+            input_feats_default_proj = self.projection_layer_fbanks(input_feats_default)
+            input_feats_s3prl_proj = self.projection_layer_s3prl(input_feats_s3prl)
+
+            # 2nd step : reshape
+            bs, nf, dim = input_feats_default_proj.shape
+            input_feats_default_reshaped = torch.reshape(
+                input_feats_default_proj,
+                (bs, nf * self.factor_for_fbanks, dim // self.factor_for_fbanks),
+            )
+            bs, nf, dim = input_feats_s3prl_proj.shape
+            input_feats_s3prl_reshaped = torch.reshape(
+                input_feats_s3prl_proj,
+                (bs, nf * self.factor_for_s3prl, dim // self.factor_for_s3prl),
+            )
+
+            # 3rd step : drop the few last frames
+
+            m = min(
+                input_feats_s3prl_reshaped.shape[1],
+                input_feats_default_reshaped.shape[1],
+            )
+            input_feats_s3prl_final = input_feats_s3prl_reshaped[:, :m, :]
+            input_feats_default_final = input_feats_default_reshaped[:, :m, :]
+
+            if self.apply_frontend_moe_on == "hubert":
+                moe_weights = self.moe_layer(input_feats_s3prl_final)
+            else:
+                moe_weights = self.moe_layer(input_feats_default_final)
+            a, b, c = input_feats_s3prl_final.shape
+            w1, w2 = moe_weights[:, :, 0].expand(c, a, b), moe_weights[:, :, 1].expand(c, a, b)
+            w1, w2 = w1.permute(1, 2, 0), w2.permute(1, 2, 0)
+
+            input_feats = w1 * input_feats_s3prl_final + w2 * input_feats_default_final
+            feats_lens = torch.ones_like(feats_lens_default) * (m)
 
         elif self.align_method == "repeat":  # a modif celle la avec les gcd
             a, b = input_feats_default, input_feats_s3prl

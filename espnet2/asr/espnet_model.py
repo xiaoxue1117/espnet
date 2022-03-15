@@ -64,6 +64,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         freeze_finetune_updates: int = 1000000000,
+        apply_moe_on: str = "hubert",
         layer_selection_hubert: str = "12",
         extract_feats_in_collect_stats: bool = True,
     ):
@@ -86,14 +87,24 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
-        self.project_hubert=torch.nn.Linear(in_features=768, out_features=256)
-        self.layer_selection_hubert = [int(x) for x in layer_selection_hubert.split()]
-        self.MOE_n_experts = 2
-        self.MOE_proj=torch.nn.Linear(in_features=256, out_features=self.MOE_n_experts)
+
+        if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
+            self.project_hubert = torch.nn.Linear(in_features=self.frontend.output_size_s3prl(),
+                                                  out_features=self.encoder._output_size())
+            self.MOE_n_experts = 2
+            self.MOE_proj=torch.nn.Linear(in_features=self.encoder._output_size(), out_features=self.MOE_n_experts)
+            self.layer_selection_hubert = [int(x) for x in layer_selection_hubert.split()]
+
+        if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "encoder_linear_fusion"):
+            self.project_hubert = torch.nn.Linear(in_features=self.frontend.output_size_s3prl(),
+                                                  out_features=self.encoder._output_size())
+            self.project_final = torch.nn.Linear(in_features=2*self.encoder._output_size(), out_features=self.encoder._output_size())
+
         # autre idée aussi : drop some frames --> mettre 3 experts
         self.use_transducer_decoder = joint_network is not None
         self.num_updates=0
         self.freeze_finetune_updates = freeze_finetune_updates
+        self.apply_moe_on=apply_moe_on
         self.error_calculator = None
 
         if self.use_transducer_decoder:
@@ -284,7 +295,7 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.extract_feats_in_collect_stats:
             if (
                 hasattr(self.frontend, "align_method")
-                and self.frontend.align_method == "elevator"
+                and (self.frontend.align_method == "elevator" or self.frontend.align_method=="encoder_linear_fusion")
             ):
                 feats, feats_lengths, feats_hubert, feats_lengths_hubert  = self._extract_feats(speech, speech_lengths)
             else :
@@ -309,7 +320,7 @@ class ESPnetASRModel(AbsESPnetModel):
             speech_lengths: (Batch, )
         """
         with autocast(False):
-            if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
+            if (hasattr(self.frontend, "align_method") and (self.frontend.align_method == "elevator" or self.frontend.align_method=="encoder_linear_fusion")):
                 # 1. Extract feats
                 feats, feats_lengths, feats_hubert, feats_lengths_hubert = self._extract_feats(speech, speech_lengths)
 
@@ -331,14 +342,6 @@ class ESPnetASRModel(AbsESPnetModel):
 
 
                 self.feats_hubert = self.project_hubert(feats_hubert)
-                
-                # mettre la gate ICI sur MFCC only :
-                with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
-                    MOE_weights = self.MOE_proj(self.feats_hubert)
-                    #MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
-                    #assert 6==0, MOE_weights.shape
-                    MOE_weights=torch.nn.functional.log_softmax(MOE_weights, dim=-1)
-                #assert 6==0, MOE_weights.shape
 
 
             else:
@@ -378,7 +381,21 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out_lens.max(),
         )
 
+
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
+
+            # mettre la gate ICI sur MFCC only :
+            with torch.no_grad() if (stop_ft and False) else contextlib.nullcontext():
+                if self.apply_moe_on == "hubert":
+                    MOE_weights = self.MOE_proj(self.feats_hubert)
+                else:
+                    MOE_weights = self.MOE_proj(encoder_out)
+                # MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
+                # assert 6==0, MOE_weights.shape
+                MOE_weights = torch.nn.functional.log_softmax(MOE_weights, dim=-1)
+            # assert 6==0, MOE_weights.shape
+
+
             # fusion part, just weighted sum with an alpha here !! 
             # drop few frames : 
             #logging.info("{} {}".format(encoder_out.shape,feats_hubert.shape))
@@ -405,6 +422,20 @@ class ESPnetASRModel(AbsESPnetModel):
 
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
+
+
+        if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "encoder_linear_fusion"):
+
+            # fusion part, just weighted sum with an alpha here !!
+            # drop few frames :
+            #logging.info("{} {}".format(encoder_out.shape,feats_hubert.shape))
+            m = min(feats_hubert.shape[1],encoder_out.shape[1])
+            diff = max(feats_hubert.shape[1]-m, encoder_out.shape[1]-m)
+            assert diff<8, "we had to drop {} frames, this seems to be too much".format(diff)
+            encoder_out, feats_hubert = encoder_out[:,:m,:], self.feats_hubert[:,:m,:]
+
+
+            encoder_out = self.project_final(torch.cat((feats_hubert, encoder_out), dim=-1))
 
         return encoder_out, encoder_out_lens
 
