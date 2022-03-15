@@ -182,13 +182,13 @@ class Default_S3prl_Frontend(AbsFrontend):
 
         # frontend_moe
         elif self.align_method == "frontend_moe":
-            self.lstm_align_s3prl = torch.nn.LSTM(
-                self.output_dim_s3prl,
-                self.factor_for_s3prl * self.n_mels,
-                batch_first=True,
-            )
-            self.lstm_align_default = torch.nn.LSTM(
-                self.n_mels, self.factor_for_fbanks * self.n_mels, batch_first=True
+            self.projection_layer_s3prl = torch.nn.Linear(
+                in_features=self.output_dim_s3prl,
+                out_features=self.factor_for_s3prl * self.n_mels,
+            )  # this way we have 80 and not 1024 for s3prl --> more balcances with fbanks
+            self.projection_layer_fbanks = torch.nn.Linear(
+                in_features=self.n_mels,
+                out_features=self.factor_for_fbanks * self.n_mels,
             )
             self.moe_layer = torch.nn.LSTM(
                 self.n_mels, 2, batch_first=True
