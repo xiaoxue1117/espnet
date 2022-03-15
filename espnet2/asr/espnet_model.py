@@ -90,9 +90,9 @@ class ESPnetASRModel(AbsESPnetModel):
 
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "elevator"):
             self.project_hubert = torch.nn.Linear(in_features=self.frontend.output_size_s3prl(),
-                                                  out_features=self.encoder._output_size())
+                                                  out_features=self.encoder._output_size)
             self.MOE_n_experts = 2
-            self.MOE_proj=torch.nn.Linear(in_features=self.encoder._output_size(), out_features=self.MOE_n_experts)
+            self.MOE_proj=torch.nn.Linear(in_features=self.encoder._output_size, out_features=self.MOE_n_experts)
             self.layer_selection_hubert = [int(x) for x in layer_selection_hubert.split()]
 
         if (hasattr(self.frontend, "align_method") and self.frontend.align_method == "encoder_linear_fusion"):
