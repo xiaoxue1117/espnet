@@ -303,7 +303,7 @@ class Trainer:
                     reporter=sub_reporter,
                     options=trainer_options,
                     distributed_option=distributed_option,
-                    store=True,
+                    store=False,
                     path="MOE_HUBERT_DIM/{}epoch".format(iepoch),
                     ep=iepoch
                 )
