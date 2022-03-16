@@ -392,7 +392,7 @@ class ESPnetASRModel(AbsESPnetModel):
                     MOE_weights = self.MOE_proj(encoder_out)
                 # MOE_weights=torch.nn.functional.softmax(MOE_weights, dim=-1)
                 # assert 6==0, MOE_weights.shape
-                MOE_weights = torch.nn.functional.softmax(MOE_weights, dim=-1)
+                MOE_weights = torch.nn.functional.log_softmax(MOE_weights, dim=-1)
             # assert 6==0, MOE_weights.shape
 
 
@@ -418,7 +418,7 @@ class ESPnetASRModel(AbsESPnetModel):
             w1, w2 = w1.permute(1,2,0), w2.permute(1,2,0)
             #logging.info(feats_hubert.shape)
             #logging.info(encoder_out.shape)
-            encoder_out = w1*feats_hubert + w2*encoder_out
+            encoder_out = torch.exp(w1)*feats_hubert + torch.exp(w2)*encoder_out
 
             if store:
                 return encoder_out, encoder_out_lens, MOE_weights
