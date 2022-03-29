@@ -57,6 +57,10 @@ for l in ${all_langs}; do
 done
 wait
 
+
+# ce qu'il y a en dessous de ca nous interesse moins, pcq d'abord je veux un dump de chaque directory specifique a une langue
+
+
 # Combine all language specific training directories and generate a single
 # lang directory by combining all language specific dictionaries
 train_dirs=""

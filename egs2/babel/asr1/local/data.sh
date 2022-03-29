@@ -5,6 +5,7 @@
 . ./cmd.sh || exit 1;
 . ./db.sh || exit 1;
 
+
 SECONDS=0
 
 log() {
@@ -12,9 +13,9 @@ log() {
     echo -e "$(date '+%Y-%m-%dT%H:%M:%S') (${fname}:${BASH_LINENO[0]}:${FUNCNAME[1]}) $*"
 }
 
-
-langs="101 102 103 104 105 106 202 203 204 205 206 207 301 302 303 304 305 306 401 402 403"
-recog="107 201 307 404"
+langs=
+recog= 
+. utils/parse_options.sh
 
 for l in ${langs} ${recog}; do
   if [ ! -e "${BABEL}_${l}" ]; then
@@ -22,6 +23,7 @@ for l in ${langs} ${recog}; do
       exit 1
   fi
 done
+
 
 # Set bash to 'debug' mode, it will exit on :
 # -e 'error', -u 'undefined variable', -o ... 'error in pipeline', -x 'print commands',
@@ -39,11 +41,17 @@ for l in ${recog}; do
 done
 recog_set=${recog_set%% }
 
+
 ./local/setup_languages.sh --langs "${langs}" --recog "${recog}"
+
+
+# language specific : 
 for x in ${train_set} ${train_dev} ${recog_set}; do
-   sed -i.bak -e "s/$/ sox -R -t wav - -t wav - rate 16000 dither | /" data/${x}/wav.scp
+  sed -i.bak -e "s/$/ sox -R -t wav - -t wav - rate 16000 dither | /" data/${x}/wav.scp
 done
 
-cut -f 2- data/${train_set}/text | tr " " "\n" | sort | uniq | grep "<" > data/nlsym.txt
+
+mv data/train data/train_${langs}
+cp data/nlsym.txt data/nlsym.${langs}.txt 
 
 log "Successfully finished. [elapsed=${SECONDS}s]"
