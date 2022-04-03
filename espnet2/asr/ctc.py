@@ -32,6 +32,8 @@ class CTC(torch.nn.Module):
         self.ctc_lo = torch.nn.Linear(eprojs, odim)
         self.ctc_type = ctc_type
         self.ignore_nan_grad = ignore_nan_grad
+        self.eprojs=eprojs
+        self.odim=odim
 
         if self.ctc_type == "builtin":
             self.ctc_loss = torch.nn.CTCLoss(reduction="none")

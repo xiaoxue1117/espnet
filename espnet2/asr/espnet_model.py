@@ -64,6 +64,10 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
+        semi_supervised: bool = False,
+        alpha_ss: float = 0.5,
+        layerMLM: int = 6,
+        semi_supervised_loss: str = "mlm",
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -153,6 +157,22 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             self.ctc = ctc
 
+
+        # semi supervised part : 
+        self.semi_supervised=semi_supervised
+        self.semi_supervised_loss=semi_supervised_loss
+        self.alpha_ss=alpha_ss
+        self.layerMLM=layerMLM
+
+        if semi_supervised : 
+            if semi_supervised_loss == "mlm" : 
+                self.ctc_lo_bis = torch.nn.Linear(self.ctc.eprojs, self.ctc.odim)
+                self.crit_loss = torch.nn.CrossEntropyLoss(reduction='none')
+            elif semi_supervised_loss == "gender":
+                self.layer_projection_gender = "jsp"
+            else : 
+                raise Exception("the semi-suêrvise loss you chosed is not implemented ({})".format(self.layer_projection_gender))
+            
         self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
 
     def forward(
@@ -182,7 +202,12 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # for data-parallel
         text = text[:, : text_lengths.max()]
+        #print("batch_size : ", batch_size)
+        #print("text : ", text)
 
+        crit = (len(text[0])==2) and (text[0][-1] == 1) and (text[0][0] == 6)
+        semi_supervised_batch =  (crit) and (self.semi_supervised)
+        
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
         intermediate_outs = None
@@ -196,7 +221,7 @@ class ESPnetASRModel(AbsESPnetModel):
         stats = dict()
 
         # 1. CTC branch
-        if self.ctc_weight != 0.0:
+        if self.ctc_weight != 0.0 and not semi_supervised_batch:
             loss_ctc, cer_ctc = self._calc_ctc_loss(
                 encoder_out, encoder_out_lens, text, text_lengths
             )
@@ -229,6 +254,31 @@ class ESPnetASRModel(AbsESPnetModel):
                 1 - self.interctc_weight
             ) * loss_ctc + self.interctc_weight * loss_interctc
 
+        if semi_supervised_batch : 
+            print("semi_supervised batch ")
+            if self.semi_supervised_loss == "mlm" : 
+            
+                 # is that problematic to not use reduction ? 
+                mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
+                argmax_ss = self.ctc.argmax(encoder_out)    # dim : (B, L, 1)
+
+                pred_ss = self.ctc_lo_bis(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
+                blank_mask = torch.where(argmax_ss==0, False, True)  # because ctc is too peaky
+
+                # vérifier que le mask masque pas tt qd meme 
+                loss_ss = self.crit_loss(pred_ss.permute(0,2,1),argmax_ss)
+                loss_ss_final = loss_ss[mlm_masks_and_non_pad & blank_mask] 
+                loss_ss_final=loss_ss_final.sum()
+        
+                loss = self.alpha_ss * loss_ss_final
+
+            elif self.semi_supervised_loss == "gender" : 
+                print("not implemented yet")
+        
+        else : 
+            print("supervised batch ")
+
+
         if self.use_transducer_decoder:
             # 2a. Transducer decoder branch
             (
@@ -254,25 +304,26 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["wer_transducer"] = wer_transducer
 
         else:
-            # 2b. Attention decoder branch
-            if self.ctc_weight != 1.0:
-                loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                    encoder_out, encoder_out_lens, text, text_lengths
-                )
+            if not semi_supervised_batch:
+                # 2b. Attention decoder branch
+                if self.ctc_weight != 1.0:
+                    loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
+                        encoder_out, encoder_out_lens, text, text_lengths
+                    )
 
-            # 3. CTC-Att loss definition
-            if self.ctc_weight == 0.0:
-                loss = loss_att
-            elif self.ctc_weight == 1.0:
-                loss = loss_ctc
-            else:
-                loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+                # 3. CTC-Att loss definition
+                if self.ctc_weight == 0.0:
+                    loss = loss_att
+                elif self.ctc_weight == 1.0:
+                    loss = loss_ctc
+                else:
+                    loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
 
-            # Collect Attn branch stats
-            stats["loss_att"] = loss_att.detach() if loss_att is not None else None
-            stats["acc"] = acc_att
-            stats["cer"] = cer_att
-            stats["wer"] = wer_att
+                # Collect Attn branch stats
+                stats["loss_att"] = loss_att.detach() if loss_att is not None else None
+                stats["acc"] = acc_att
+                stats["cer"] = cer_att
+                stats["wer"] = wer_att
 
         # Collect total loss stats
         stats["loss"] = loss.detach()
@@ -358,6 +409,51 @@ class ESPnetASRModel(AbsESPnetModel):
             return (encoder_out, intermediate_outs), encoder_out_lens
 
         return encoder_out, encoder_out_lens
+
+
+
+    def encode_mask(
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, layer: int=12
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Frontend + Encoder. Note that this method is used by asr_inference.py
+        Args:
+            speech: (Batch, Length, ...)
+            speech_lengths: (Batch, )
+        """
+
+        # needs to return : mlm_encoder_out, mlm_encoder_out_lens, mlm_masks
+        with autocast(False):
+            # 1. Extract feats
+            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+
+            # 2. Data augmentation
+            if self.specaug is not None and self.training:
+                feats, feats_lengths = self.specaug(feats, feats_lengths)
+
+            # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+            if self.normalize is not None:
+                feats, feats_lengths = self.normalize(feats, feats_lengths)
+
+        # Pre-encoder, e.g. used for raw input data
+        if self.preencoder is not None:
+            feats, feats_lengths = self.preencoder(feats, feats_lengths)
+
+        # 4. Forward encoder
+        # feats: (Batch, Length, Dim)
+        # -> encoder_out: (Batch, Length2, Dim2)
+        encoder_out, encoder_out_lens, masks = self.encoder(feats, feats_lengths, independant_study=True, layer=layer)
+
+
+        assert encoder_out.size(0) == speech.size(0), (
+            encoder_out.size(),
+            speech.size(0),
+        )
+        assert encoder_out.size(1) <= encoder_out_lens.max(), (
+            encoder_out.size(),
+            encoder_out_lens.max(),
+        )
+
+        return encoder_out, encoder_out_lens, masks
 
     def _extract_feats(
         self, speech: torch.Tensor, speech_lengths: torch.Tensor

@@ -269,6 +269,31 @@ class ASRTask(AbsTask):
             help="The model file of sentencepiece",
         )
         parser.add_argument(
+            "--semi_supervised",
+            type=str2bool,
+            default=False,
+            help="independant study semi-supervised training",
+        )
+
+        parser.add_argument(
+            "--alpha_ss",
+            type=float,
+            default=0.5,
+            help="weight of the semi-supervised loss",
+        )
+        parser.add_argument(
+            "--layerMLM",
+            type=int,
+            default=6,
+            help="output layer for the semi-supervised loss",
+        )
+        parser.add_argument(
+            "--semi_supervised_loss",
+            type=str,
+            default="mlm",
+            help="type of semi supervised loss, for now can be mlm or gender",
+        )
+        parser.add_argument(
             "--non_linguistic_symbols",
             type=str_or_none,
             help="non_linguistic_symbols file path",
@@ -323,6 +348,7 @@ class ASRTask(AbsTask):
             default="13_15",
             help="The range of noise decibel level.",
         )
+
 
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
@@ -492,6 +518,28 @@ class ASRTask(AbsTask):
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
         )
 
+        # semi supervised training : 
+        if getattr(args, "semi_supervised", None) is not None:
+            semi_supervised = args.semi_supervised
+        else:
+            semi_supervised = False
+
+        if getattr(args, "alpha_ss", None) is not None:
+            alpha_ss = args.alpha_ss
+        else:
+            alpha_ss = 0.5
+
+        if getattr(args, "layerMLM", None) is not None:
+            layerMLM = args.layerMLM
+        else:
+            layerMLM = 6
+
+        if getattr(args, "semi_supervised_loss", None) is not None:
+            semi_supervised_loss = args.semi_supervised_loss
+        else:
+            semi_supervised_loss = "mlm"
+        
+
         # 7. Build model
         try:
             model_class = model_choices.get_class(args.model)
@@ -509,6 +557,10 @@ class ASRTask(AbsTask):
             ctc=ctc,
             joint_network=joint_network,
             token_list=token_list,
+            semi_supervised=semi_supervised,
+            alpha_ss=alpha_ss,
+            layerMLM=layerMLM,
+            semi_supervised_loss=semi_supervised_loss,
             **args.model_conf,
         )
 
