@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import contextlib
 from distutils.version import LooseVersion
 import logging
 from typing import Dict
@@ -169,7 +170,8 @@ class ESPnetASRModel(AbsESPnetModel):
                 self.ctc_lo_bis = torch.nn.Linear(self.ctc.eprojs, self.ctc.odim)
                 self.crit_loss = torch.nn.CrossEntropyLoss(reduction='none')
             elif semi_supervised_loss == "gender":
-                self.layer_projection_gender = "jsp"
+                self.layer_projection_gender = torch.nn.Linear(self.ctc.eprojs, 2)
+                self.crit_loss = torch.nn.CrossEntropyLoss(reduction='none')
             else : 
                 raise Exception("the semi-suêrvise loss you chosed is not implemented ({})".format(self.layer_projection_gender))
             
@@ -205,15 +207,20 @@ class ESPnetASRModel(AbsESPnetModel):
         #print("batch_size : ", batch_size)
         #print("text : ", text)
 
-        crit = (len(text[0])==2) and (text[0][-1] == 1) and (text[0][0] == 6)
-        semi_supervised_batch =  (crit) and (self.semi_supervised)
+        crit1 = (len(text[0])==3) and (text[0][0] == 130) and (text[0][1] == 374) and (text[0][-1] == 48)# trop spécifique à un langage en particulier !! 
+        crit2 = (len(text[0])==2) and ((text[0][0] == 392) or (text[0][1] == 852))
+        semi_supervised_batch =  (crit1 or crit2) and (self.semi_supervised)
         
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
-        intermediate_outs = None
-        if isinstance(encoder_out, tuple):
-            intermediate_outs = encoder_out[1]
-            encoder_out = encoder_out[0]
+        ft = self.encoder.freeze_finetune_updates <= self.encoder.num_updates*2 # je commence à le ft un peu avant 
+        if semi_supervised_batch and self.semi_supervised_loss == "gender": 
+            encoder_out, encoder_out_lens = self.encode(speech, speech_lengths, layer=self.layerMLM) # tej le encoder out plus haut pour ca, pas besoin de passer deux fois par l'input !! 
+        else :
+            encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+            intermediate_outs = None
+            if isinstance(encoder_out, tuple):
+                intermediate_outs = encoder_out[1]
+                encoder_out = encoder_out[0]
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
@@ -255,28 +262,46 @@ class ESPnetASRModel(AbsESPnetModel):
             ) * loss_ctc + self.interctc_weight * loss_interctc
 
         if semi_supervised_batch : 
-            print("semi_supervised batch ")
+    
+        #logging.info("semi_supervised batch ")
             if self.semi_supervised_loss == "mlm" : 
             
-                 # is that problematic to not use reduction ? 
+                # is that problematic to not use reduction ? 
                 mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
                 argmax_ss = self.ctc.argmax(encoder_out)    # dim : (B, L, 1)
 
+                #with torch.no_grad() if not ft else contextlib.nullcontext(): # do not use unsupervised data before some steps : my intuition
                 pred_ss = self.ctc_lo_bis(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
                 blank_mask = torch.where(argmax_ss==0, False, True)  # because ctc is too peaky
 
                 # vérifier que le mask masque pas tt qd meme 
                 loss_ss = self.crit_loss(pred_ss.permute(0,2,1),argmax_ss)
                 loss_ss_final = loss_ss[mlm_masks_and_non_pad & blank_mask] 
+                #logging.info("mask : {}".format(mlm_masks_and_non_pad & blank_mask))  # check if masks are ok --> done 
                 loss_ss_final=loss_ss_final.sum()
         
                 loss = self.alpha_ss * loss_ss_final
 
+                if not ft : 
+                    loss = 0.0*loss
+
             elif self.semi_supervised_loss == "gender" : 
-                print("not implemented yet")
+                
+                male_female = torch.nn.functional.softmax(self.layer_projection_gender(encoder_out), dim=-1)
+                mf = male_female.mean(dim=1)
+
+                ground_truth = torch.ones(text.shape[0], dtype=torch.long, device=mf.device)
+                for i,x in enumerate(text):
+                    if x[0]==392:
+                        ground_truth[i]=0
+                    else:
+                        ground_truth[i]=1
+
+                loss = self.alpha_ss * 50 * self.crit_loss(mf, ground_truth).sum()  # ici je pense qu'on peut commencer à apprendre les poids direct vu que c'est pas vraiment du pseudo label
         
         else : 
-            print("supervised batch ")
+            inutile=2
+            #logging.info("supervised batch ")
 
 
         if self.use_transducer_decoder:
@@ -352,7 +377,7 @@ class ESPnetASRModel(AbsESPnetModel):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, layer: int=12
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
@@ -384,7 +409,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 feats, feats_lengths, ctc=self.ctc
             )
         else:
-            encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
+            encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths, layer=layer)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -413,7 +438,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
 
     def encode_mask(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor, layer: int=12
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, layer: int=6
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
         Args:

@@ -9,15 +9,14 @@ lang="107"
 recog=$lang
 
 
-nj=20
+nj=10
 train_set=train_${lang}
 valid_set=dev_${lang}
 test_set=eval_${lang}
 
 
 #BASELINE CONFIG : 
-asr_config=conf/tuning/train_asr_transformer_default_xlsr_linear_plus.yaml
-
+asr_config=conf/tuning/train_asr_hubert_base.yaml
 
 lm_config=conf/train_lm.yaml
 inference_config=conf/decode_asr.yaml
@@ -52,9 +51,12 @@ speed_perturb_factors="1.1 0.9 1.0"
     --speed_perturb_factors "${speed_perturb_factors}" \
     --ngpu 1 \
     --lang ${lang} \
-    --expdir exp_bengali \
+    --expdir exp_semi_supervised \
     --dumpdir dump/dump_lid_${lang} \
-    --lm_train_text "data/${train_set}/text" "$@"
+    --lm_train_text "data/${train_set}/text" "$@" \
+    --num_splits_asr 14 \
 
 
-# sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=4 --mem=30G  --output=OUTPUTS/102.out  run.sh --stage 1  --stop_stage 5
+# sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=4 --mem=30G   run.sh --stage 1  --stop_stage 5
+
+# sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=10 --mem=40G   run.sh --stage 10  --stop_stage 10 
