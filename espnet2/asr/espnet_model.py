@@ -297,11 +297,10 @@ class ESPnetASRModel(AbsESPnetModel):
                     else:
                         ground_truth[i]=1
 
-                loss = self.alpha_ss * 50 * self.crit_loss(mf, ground_truth).sum()  # ici je pense qu'on peut commencer à apprendre les poids direct vu que c'est pas vraiment du pseudo label
-        
-        else : 
-            inutile=2
-            #logging.info("supervised batch ")
+                loss = -1.0 * self.alpha_ss * self.crit_loss(mf, ground_truth).sum()  # ici je pense qu'on peut commencer à apprendre les poids direct vu que c'est pas vraiment du pseudo label
+
+
+
 
 
         if self.use_transducer_decoder:

@@ -1,6 +1,6 @@
 batch_type: folded
-batch_size: 16
-accum_grad: 2
+batch_size: 8
+accum_grad: 1
 max_epoch: 50
 patience: none
 # The initialization method for model parameters
@@ -15,6 +15,12 @@ freeze_param: [
     "encoder.encoders.mask_emb", "encoder.encoders.feature_extractor",
     "encoder.encoders.post_extract_proj", "encoder.encoders.encoder.pos_conv",
 ]
+
+
+semi_supervised: true
+alpha_ss: 1
+semi_supervised_loss: mlm
+layerMLM: 6
 
 input_size: 1
 encoder: hubert

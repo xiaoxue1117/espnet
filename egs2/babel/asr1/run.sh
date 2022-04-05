@@ -51,10 +51,10 @@ speed_perturb_factors="1.1 0.9 1.0"
     --speed_perturb_factors "${speed_perturb_factors}" \
     --ngpu 1 \
     --lang ${lang} \
-    --expdir exp_semi_supervised \
+    --expdir exp_semi_supervised_gender \
     --dumpdir dump/dump_lid_${lang} \
     --lm_train_text "data/${train_set}/text" "$@" \
-    --num_splits_asr 14 \
+    #--num_splits_asr 14 \
 
 
 # sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=4 --mem=30G   run.sh --stage 1  --stop_stage 5
