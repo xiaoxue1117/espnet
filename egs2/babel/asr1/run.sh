@@ -10,7 +10,8 @@ recog=$lang
 
 
 nj=10
-train_set=train_${lang}
+#train_set=train_${lang}_10h
+train_set=train_${lang}_10h_semi_gender
 valid_set=dev_${lang}
 test_set=eval_${lang}
 
@@ -48,15 +49,14 @@ speed_perturb_factors="1.1 0.9 1.0"
     --test_sets "${test_set}" \
     --nj "${nj}" \
     --inference_nj "${nj}" \
-    --speed_perturb_factors "${speed_perturb_factors}" \
     --ngpu 1 \
     --lang ${lang} \
-    --expdir exp_semi_supervised_gender \
+    --expdir exp_utt2cat \
     --dumpdir dump/dump_lid_${lang} \
     --lm_train_text "data/${train_set}/text" "$@" \
-    #--num_splits_asr 14 \
+    #--num_splits_asr 2 \
 
 
-# sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=4 --mem=30G   run.sh --stage 1  --stop_stage 5
+# sbatch -t 0 --exclude tir-1-11  --cpus-per-task=10 --mem=40G   run.sh --stage 4  --stop_stage 4
 
-# sbatch -t 0 --exclude tir-0-17,tir-0-15,tir-0-36,tir-0-11  --cpus-per-task=10 --mem=40G   run.sh --stage 10  --stop_stage 10 
+# sbatch -t 0 --exclude tir-1-11  --cpus-per-task=10 --mem=40G   run.sh --stage 10  --stop_stage 10 

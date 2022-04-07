@@ -19,8 +19,8 @@ for i in range(len(df)):
 
 
 
-for spl in range(1,14):
-    nf = "exp_semi_supervised_gender/asr_stats_raw_107_bpe1000_sp/splits14/text/split.{}".format(spl)
+for spl in range(1,2):
+    nf = "exp_semi_supervised_gender_10h/asr_stats_raw_107_bpe1000/splits2/text/split.{}".format(spl)
 
     with open(nf,"r") as f:
         text = f.readlines()

@@ -68,7 +68,7 @@ class ESPnetASRModel(AbsESPnetModel):
         semi_supervised: bool = False,
         alpha_ss: float = 0.5,
         layerMLM: int = 6,
-        semi_supervised_loss: str = "mlm",
+        semi_supervised_loss: str = "gender",
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -183,6 +183,7 @@ class ESPnetASRModel(AbsESPnetModel):
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
         text_lengths: torch.Tensor,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
 
@@ -202,19 +203,25 @@ class ESPnetASRModel(AbsESPnetModel):
         ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
         batch_size = speech.shape[0]
 
+        utt_id = kwargs.get("utt_id", None)
+
+        #logging.info(utt_id)
+
         # for data-parallel
         text = text[:, : text_lengths.max()]
-        #print("batch_size : ", batch_size)
-        #print("text : ", text)
-
-        crit1 = (len(text[0])==3) and (text[0][0] == 130) and (text[0][1] == 374) and (text[0][-1] == 48)# trop spécifique à un langage en particulier !! 
-        crit2 = (len(text[0])==2) and ((text[0][0] == 392) or (text[0][1] == 852))
-        semi_supervised_batch =  (crit1 or crit2) and (self.semi_supervised)
+        if utt_id is None: 
+            semi_supervised_batch = False
+        else:
+            semi_supervised_batch =  ("SEMI" in utt_id[0]) and self.semi_supervised
         
         # 1. Encoder
-        ft = self.encoder.freeze_finetune_updates <= self.encoder.num_updates*2 # je commence à le ft un peu avant 
+        ft = self.encoder.freeze_finetune_updates <= self.encoder.num_updates 
         if semi_supervised_batch and self.semi_supervised_loss == "gender": 
             encoder_out, encoder_out_lens = self.encode(speech, speech_lengths, layer=self.layerMLM) # tej le encoder out plus haut pour ca, pas besoin de passer deux fois par l'input !! 
+       
+        elif semi_supervised_batch and self.semi_supervised_loss == "mlm":
+            with torch.no_grad() :
+                encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
         else :
             encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
             intermediate_outs = None
@@ -262,15 +269,12 @@ class ESPnetASRModel(AbsESPnetModel):
             ) * loss_ctc + self.interctc_weight * loss_interctc
 
         if semi_supervised_batch : 
-    
         #logging.info("semi_supervised batch ")
             if self.semi_supervised_loss == "mlm" : 
-            
-                # is that problematic to not use reduction ? 
-                mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
-                argmax_ss = self.ctc.argmax(encoder_out)    # dim : (B, L, 1)
 
-                #with torch.no_grad() if not ft else contextlib.nullcontext(): # do not use unsupervised data before some steps : my intuition
+                with torch.no_grad() if not ft else contextlib.nullcontext(): # do not use unsupervised data before some steps : my intuition
+                    mlm_encoder_out, mlm_encoder_out_lens, mlm_masks_and_non_pad = self.encode_mask(speech, speech_lengths, layer=self.layerMLM)
+                argmax_ss = self.ctc.argmax(encoder_out)    # dim : (B, L, 1)
                 pred_ss = self.ctc_lo_bis(torch.nn.functional.dropout(mlm_encoder_out, p=self.ctc.dropout_rate))
                 blank_mask = torch.where(argmax_ss==0, False, True)  # because ctc is too peaky
 
@@ -282,26 +286,22 @@ class ESPnetASRModel(AbsESPnetModel):
         
                 loss = self.alpha_ss * loss_ss_final
 
-                if not ft : 
-                    loss = 0.0*loss
+                
 
             elif self.semi_supervised_loss == "gender" : 
-                
+                #logging.info("loss ctc avant : {}".format(stats["loss_ctc"]), )
                 male_female = torch.nn.functional.softmax(self.layer_projection_gender(encoder_out), dim=-1)
                 mf = male_female.mean(dim=1)
 
                 ground_truth = torch.ones(text.shape[0], dtype=torch.long, device=mf.device)
-                for i,x in enumerate(text):
-                    if x[0]==392:
+                for i,x in enumerate(utt_id):
+                    if "_F" in x: 
                         ground_truth[i]=0
                     else:
                         ground_truth[i]=1
 
                 loss = -1.0 * self.alpha_ss * self.crit_loss(mf, ground_truth).sum()  # ici je pense qu'on peut commencer à apprendre les poids direct vu que c'est pas vraiment du pseudo label
-
-
-
-
+                #logging.info("loss ctc apres : {}".format(stats["loss_ctc"]))
 
         if self.use_transducer_decoder:
             # 2a. Transducer decoder branch
