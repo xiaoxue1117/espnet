@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.0.1`
 - Git hash: `83eb81ca220f8189f94a173851934acf8bbba0df`
   - Commit date: `Tue Jan 28 09:34:59 2020 -0500`
+- lang : eng
 
 ## asr_train_rnn_fbank_pitch_char
 ### WER
