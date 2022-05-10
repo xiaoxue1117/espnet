@@ -8,6 +8,7 @@
 - Git hash: `f6cbc61353e0a1cefe81ae596278f7db1f0b7dd9`
   - Commit date: `Fri Apr 15 18:31:26 2022 -0400`
 - Model on HuggingFace repository : https://huggingface.co/espnet/accented_french_openslr57_ASR_transformer
+- lang : fra
 
 ## asr_transformer_baseline
 ### WER
