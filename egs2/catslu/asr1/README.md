@@ -7,6 +7,8 @@
 - pytorch version: `pytorch 1.8.1+cu102`
 - Git hash: `e31965d55993766461f0964216a0bb9aea3cfb7a`
   - Commit date: `Fri Oct 22 16:33:16 2021 -0400`
+- pretrained model : https://huggingface.co/espnet/sujay_catslu_map
+- lang : cmn 
 
 ## Intent Classification Results
 
