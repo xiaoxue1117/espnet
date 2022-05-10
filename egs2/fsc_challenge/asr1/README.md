@@ -9,7 +9,7 @@
     - Unseen Utterance Test Set: Test generalisation to new utterances, Similar distribution of transcript length in train and test set
       - Additional constraints to reduce n-gram overlap with training set
   - Paper: http://arxiv.org/abs/2106.15065
-
+- lang : eng
 ## Environments
 - date: `Sun Oct  3 22:25:25 EDT 2021`
 - python version: `3.8.11 (default, Aug  3 2021, 15:09:35)  [GCC 7.5.0]`
