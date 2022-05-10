@@ -15,6 +15,7 @@ For more details on how use fusion of front-ends, you can refer to this [wiki](h
 - pytorch version: `pytorch 1.2.0`
 - Git hash: `31852d3eb9c227ad01dad42dc342a98beb298c16`
   - Commit date: `Fri Nov 27 09:17:36 2020 +0900`
+- lang : multi
 
 ## asr_train_asr_conformer5_raw_cy_bpe150_sp
 ### WER
