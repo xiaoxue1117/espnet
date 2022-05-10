@@ -8,7 +8,7 @@
 - pytorch version: `pytorch 1.5.1`
 - Git hash: `51352aee9ae318640e128a645e722d1f7524edb1`
   - Commit date: `Sat Sep 26 10:35:32 2020 +0900`
-
+- lang : jpn
 ## Pretrained model
 
 - https://zenodo.org/record/4065140
