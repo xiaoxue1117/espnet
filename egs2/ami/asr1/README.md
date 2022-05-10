@@ -4,9 +4,11 @@
 - date: `Thu Mar 18 03:15:25 UTC 2021`
 - python version: `3.8.8 (default, Feb 24 2021, 21:46:12)  [GCC 7.3.0]`
 - espnet version: `espnet 0.9.8`
-- pytorch version: `pytorch 1.8.0`
+- pytorch version: `pytorch 1.8.0
 - Git hash: `106acf3e84fc1d466d6c07c7914847a169f9713c`
   - Commit date: `Thu Mar 18 04:22:14 2021 +0000`
+- lang : eng
+  
 
 ## Transformer LM
 - ASR config: [conf/tuning/train_asr_transformer4.yaml](conf/tuning/train_asr_transformer4.yaml)
