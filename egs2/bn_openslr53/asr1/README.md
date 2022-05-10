@@ -7,6 +7,7 @@
 - Git hash: `9d09bf551a9fe090973de60e15adec1de6b3d054`
   - Commit date: `Fri Jan 21 11:43:15 2022 -0500`
 - Pretrained Model: https://huggingface.co/espnet/bn_openslr53
+- lang : ben
 
 ## asr_train_asr_raw_bpe1000
 ### WER
