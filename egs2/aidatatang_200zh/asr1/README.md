@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.7.1`
 - Git hash: `a5bacd349a47889aef795f999563018cf201ae64`
   - Commit date: `Wed Dec 22 14:08:29 2021 -0500`
+-lang : cmn
 
 ## asr_train_asr_conformer_raw_zh_char_sp
 - Model link: https://huggingface.co/sw005320/aidatatang_200zh_conformer
