@@ -9,6 +9,8 @@ For Training set
 For test sets
 
 - DIRHA English WSJ Audio: https://catalog.ldc.upenn.edu/LDC2018S01
+- lang : eng
+
 
 # RESULTS
 ## asr_train_asr_transformer_cmvn_raw_char_rir_scpdatadirha_irwav.scp_noise_db_range10_17_noise_scpdatadirha_noisewav.scp_speech_volume_normalize1.0_num_workers2_rir_apply_prob1._sp
