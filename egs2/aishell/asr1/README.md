@@ -6,6 +6,7 @@
 - pytorch version: `pytorch 1.5.0`
 - Git hash: `b94d07028099a80c9c690341981ae7d550b5ca24`
   - Commit date: `Mon Aug 23 00:47:47 2021 +0800`
+- lang : cmn
 
 ## With Transformer LM
 - Model link: (wait for upload)
