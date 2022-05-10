@@ -7,7 +7,7 @@
     - Unseen Speaker Test Set: Test generalisation to new speaker, Similar distribution of speaker diversity in train and test set
     - Unseen Utterance Test Set: Test generalisation to new utterances, Similar distribution of transcript length in train and test set
   - Paper: http://arxiv.org/abs/2106.15065
-
+- lang : eng
 ## Environments
 - date: `Mon Oct 11 13:11:36 2021 -0400`
 - python version: `3.9.5 (default, Jun  4 2021, 12:28:51) [GCC 7.5.0]`
