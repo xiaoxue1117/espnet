@@ -7,7 +7,7 @@
 - espnet version: `espnet 0.9.7`
 - pytorch version: `pytorch 1.6.0`
 - Note: PESQ is evaluated based on https://github.com/vBaiCai/python-pesq
-
+- lang : eng
 
 ## enh_train_enh_conv_tasnet_raw
 
