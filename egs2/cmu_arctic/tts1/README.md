@@ -1,5 +1,7 @@
 # CMU ARCTIC RECIPE
 
+- lang : eng
+
 This is the recipe of the TTS model with the [CMU ARCTIC](http://www.festvox.org/cmu_arctic/) databases.
 
 See the following pages for the usage:
