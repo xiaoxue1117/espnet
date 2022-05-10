@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.8.1`
 - Git hash: `44971ff962aae30c962226f1ba3d87de057ac00e`
   - Commit date: `Wed Apr 27 10:13:03 2022 -0400`
+- lang : eng
 
 ## enh_asr_train_enh_asr_convtasnet_init_noenhloss_wavlm_transformer_init_lr1e-4_accum1_adam_specaug_bypass0_raw_en_char
 - Pretrained model: https://huggingface.co/espnet/simpleoier_chime4_enh_asr_convtasnet_init_noenhloss_wavlm_transformer_init_raw_en_char
