@@ -25,6 +25,7 @@ See the following pages before asking the question:
 - pytorch version: `pytorch 1.7.1`
 - Git hash: `dee654041cddf80281048b3e7525c1cdafc377ff`
   - Commit date: `Thu Sep 2 14:45:48 2021 +0900`
+- lang : cmn
 
 ## Pretrained Models
 
