@@ -16,7 +16,8 @@ For more info on Clarity CEC1 see https://claritychallenge.github.io/clarity_CEC
 - pytorch version: `pytorch 1.10.1`
 - Git hash: `46eaa5eb6bea11cc33927392dca7888921491d8c`
   - Commit date: `Sat Mar 26 22:35:44 2022 +0100`
-
+- lang : eng
+- pretrained model : https://huggingface.co/popcornell/clarity21_train_enh_beamformer_mvdr
 
 ## enh_train_enh_beamformer_mvdr_raw
 
