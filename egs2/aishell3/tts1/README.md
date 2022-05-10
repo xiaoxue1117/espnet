@@ -1,6 +1,7 @@
 # AISHELL3 RECIPE
 
-- lang : cmn 
+- lang : cmn
+ 
 This is the recipe of Mandrain multi-speaker TTS model with [aishell3](https://www.openslr.org/93/) corpus.
 
 See the following pages for the usage:
