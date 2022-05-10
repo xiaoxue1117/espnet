@@ -15,7 +15,7 @@
 - pytorch version: `pytorch 1.4.0`
 - Git hash: `bd80c0522eab5c41baebfb903276938650575d80`
   - Commit date: `Tue Feb 25 23:31:36 2020 +0900`
-- lang : eng
+- lang : multi
 
 ## asr_lsm_torch14_xavier_init
 ### WER
