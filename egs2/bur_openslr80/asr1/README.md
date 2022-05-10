@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.10.1`
 - Git hash: `7ae4efd81778436a98b822483e8123adba6aa430`
   - Commit date: `Tue Mar 15 20:11:18 2022 -0400`
+- lang : mya
 
 ## asr_train_asr_hubert_transformer_adam_specaug_raw_bpe150
 ### WER
