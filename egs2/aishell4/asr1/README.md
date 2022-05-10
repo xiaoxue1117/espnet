@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.9.0`
 - Git hash: `7887faeabbc2299922267928e190ed89cb032a36`
   - Commit date: `Mon Sep 20 16:25:02 2021 -0400`
+- lang : cmn
 
 ## asr_complet
 
