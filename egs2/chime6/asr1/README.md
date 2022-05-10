@@ -7,6 +7,7 @@
 - pytorch version: `pytorch 1.10.1`
 - Git hash: `b757b89d45d5574cebf44e225cbe32e3e9e4f522`
   - Commit date: `Mon May 2 09:21:08 2022 -0400`
+- lang : eng
 
 ## asr_train_asr_transformer_wavlm_lr1e-3_specaug_accum1_preenc128_warmup20k_raw_en_bpe1000_sp
 - Pretrained model: https://huggingface.co/espnet/simpleoier_chime6_asr_transformer_wavlm_lr1e-3
