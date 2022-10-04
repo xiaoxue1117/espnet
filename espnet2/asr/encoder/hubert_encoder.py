@@ -13,9 +13,10 @@ import copy
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
-
+from typing import List, Optional, Tuple
+import math
 import torch
+from torch import nn
 import yaml
 from filelock import FileLock
 from typeguard import check_argument_types
@@ -64,8 +65,13 @@ class FairseqHubertEncoder(AbsEncoder):
         mask_channel_prob: float = 0.5,
         mask_channel_other: int = 0,
         mask_channel_selection: str = "static",
-        layerdrop: float = 0.1,
+        layerdrop: float = 0.0,
         feature_grad_mult: float = 0.0,
+        heads: bool = False, 
+        attention_in_heads: bool = False,
+        heads_ff_dim: int = 512,
+        heads_att_dim: int = 512, 
+        heads_layer_list: str = "5_10_15_20"
     ):
         assert check_argument_types()
         super().__init__()
@@ -134,7 +140,7 @@ class FairseqHubertEncoder(AbsEncoder):
         else:
 
             self.hubert_model_path = download_hubert(hubert_url, hubert_dir_path)
-
+            
             (
                 models,
                 self.pretrained_cfg,
@@ -145,7 +151,6 @@ class FairseqHubertEncoder(AbsEncoder):
                 strict=False,
             )
             model = models[0]
-
             d = self.pretrained_cfg.model.encoder_embed_dim
             self.pretrained_params = copy.deepcopy(model.state_dict())
 
@@ -173,10 +178,38 @@ class FairseqHubertEncoder(AbsEncoder):
             )
         else:
             self.output_layer = None
+        
+        # Early Exit code 
+        self.heads = heads 
+        self.heads_layer_list = [int(a) for a in heads_layer_list.split("_")]
+        if self.heads:
+            self.heads_ff_dim = heads_ff_dim
+            self.n_ee_heads = len(self.heads_layer_list)
+        self.attention_in_heads = heads and attention_in_heads
+        if self.attention_in_heads :
+            self.heads_att_dim = heads_att_dim
+
+        if (self.heads and self.attention_in_heads) :
+            self.ee_heads = torch.nn.ModuleList(
+                torch.nn.Sequential(
+                    nn.Linear(d, d), 
+                    MultiHead_Attn(n_heads=1, emb_dim=d, qk_dim=self.heads_att_dim, v_dim=self.heads_att_dim, dropout=0.3), 
+                    FeedForward(d, self.heads_ff_dim, dropout=0.3),  # tune dropout 
+                )
+                for i in range(self.n_ee_heads)
+            )
+        elif (self.heads) :
+            self.ee_heads = torch.nn.ModuleList(
+                torch.nn.Sequential(
+                    nn.Linear(d, d),
+                    FeedForward(d, self.heads_ff_dim, dropout=0.3),  # tune dropout  
+                )
+                for i in range(self.n_ee_heads)
+            )
 
         self.freeze_finetune_updates = freeze_finetune_updates
         self.register_buffer("num_updates", torch.LongTensor([0]))
-
+    
     def output_size(self) -> int:
         return self._output_size
 
@@ -205,7 +238,7 @@ class FairseqHubertEncoder(AbsEncoder):
             self.num_updates += 1
             logging.info("Start fine-tuning hubert parameters!")
         else:
-            self.num_updates += 1
+            self.num_updates += 1    
         with torch.no_grad() if not ft else contextlib.nullcontext():
             enc_outputs = self.encoders(
                 xs_pad,
@@ -217,6 +250,12 @@ class FairseqHubertEncoder(AbsEncoder):
 
         xs_pad = enc_outputs["x"]  # (B,T,C),
         masks = enc_outputs["padding_mask"]  # (B, T)
+        layer_results = enc_outputs["layer_results"] # à voir!
+
+        if self.heads:
+            intermediate_outs = [(i, layer_results[i][0]) for i in self.heads_layer_list]  # here modify to have only certain heads
+        else : # write it better but I need this also if no heads but still intermediate CTC
+            intermediate_outs = [(i, layer_results[i][0]) for i in self.heads_layer_list] 
 
         # save gpu memory
         del enc_outputs
@@ -229,11 +268,21 @@ class FairseqHubertEncoder(AbsEncoder):
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 
+        if self.heads : # add a param later
+            return (xs_pad, intermediate_outs), olens, None
+
         return xs_pad, olens, None
 
     def reload_pretrained_parameters(self):
+        #for name, para in self.encoders.named_parameters():
+        #    print('{}: {}'.format(name, para.shape))
+        #assert 5==0
         self.encoders.load_state_dict(self.pretrained_params, strict=False)
+        #assert 9==0, (len(self.pretrained_params.keys() & self.encoders.state_dict().keys()), len(self.pretrained_params.keys()), len(self.encoders.state_dict().keys()) 
         logging.info("Pretrained Hubert model parameters reloaded!")
+
+    #def reload_pretrained_parameters_ctc(self):
+
 
 
 class FairseqHubertPretrainEncoder(AbsEncoder):
@@ -381,12 +430,95 @@ def download_hubert(model_url, dir_path):
 
     model_name = model_url.split("/")[-1]
     model_path = os.path.join(dir_path, model_name)
-
-    with FileLock(model_path + ".lock"):
-        if not os.path.exists(model_path):
-            torch.hub.download_url_to_file(model_url, model_path)
-            logging.info(f"Hubert model downloaded {model_path}")
-        else:
-            logging.info(f"Hubert model {model_path} already exists.")
+    if False : # often problems from FAIRSEQ, download manually and then skip this phase !!
+        with FileLock(model_path + ".lock"):
+            if not os.path.exists(model_path):
+                torch.hub.download_url_to_file(model_url, model_path)
+                logging.info(f"Hubert model downloaded {model_path}")
+            else:
+                logging.info(f"Hubert model {model_path} already exists.")
+    logging.info(f"Hubert model {model_path} already exists.")
 
     return model_path
+
+
+
+
+class FeedForward(torch.nn.Module):
+  def __init__(self, emb_dim, ff_dim, dropout):
+    super(FeedForward, self).__init__()
+    self.FF_in = torch.nn.Linear(emb_dim, ff_dim)
+    self.FF_out = torch.nn.Linear(ff_dim, emb_dim)
+    self.dropout = torch.nn.Dropout(dropout) #this regularization is not used in the original model
+
+  def forward(self, x):
+    tmp = self.FF_in(x)
+    tmp = torch.nn.functional.relu(tmp)
+    tmp = self.dropout(tmp)
+    tmp = self.FF_out(tmp)
+    tmp = self.dropout(tmp)
+    return tmp
+
+
+
+##############################################################################################################
+### MultiHead_Attn ###########################################################################################
+##############################################################################################################
+class MultiHead_Attn(torch.nn.Module):
+  def __init__(self, n_heads, emb_dim, qk_dim, v_dim, dropout):
+    super(MultiHead_Attn, self).__init__()
+    self.nh = n_heads
+    self.ed = emb_dim
+    self.qd = qk_dim
+    self.kd = qk_dim
+    self.vd = v_dim
+    self.WQ = torch.nn.Linear(emb_dim, qk_dim*n_heads)
+    self.WK = torch.nn.Linear(emb_dim, qk_dim*n_heads)
+    self.WV = torch.nn.Linear(emb_dim, v_dim*n_heads)
+    self.WO = torch.nn.Linear(v_dim*n_heads, emb_dim)
+    self.dropout = torch.nn.Dropout(dropout)
+
+  def forward(self, q, k=None, v=None, msk=None):
+    #q is [bs, lq, ed]
+    #k is [bs, lk, ed]
+    #v is [bs, lv, ed]
+    #msk is [bs, 1, ls] or [bs, lt, lt]
+    #logging.info('q = {}'.format(q.shape))
+    #logging.info('k = {}'.format(k.shape))
+    #logging.info('v = {}'.format(v.shape))
+
+    if k is None : 
+        k = q 
+        v=q 
+
+    if msk is not None:
+      msk = msk.unsqueeze(1) #[bs, 1, 1, ls] or [bs, 1, lt, lt]
+
+    #logging.info('msk = {}'.format(msk.shape))
+
+    bs = q.shape[0]
+    lq = q.shape[1] ### sequence length of q vectors (length of target sentences)
+    lk = k.shape[1] ### sequence length of k vectors (may be length of source/target sentences)
+    lv = v.shape[1] ### sequence length of v vectors (may be length of source/target sentences)
+    ed = q.shape[2]
+    assert self.ed == q.shape[2] == k.shape[2] == v.shape[2]
+    assert lk == lv #when applied in decoder both refer the source-side (lq refers the target-side)
+    Q = self.WQ(q).contiguous().view([bs,lq,self.nh,self.qd]).permute(0,2,1,3) #=> [bs,lq,nh*qd] => [bs,lq,nh,qd] => [bs,nh,lq,qd]
+    K = self.WK(k).contiguous().view([bs,lk,self.nh,self.kd]).permute(0,2,1,3) #=> [bs,lk,nh*kd] => [bs,lk,nh,kd] => [bs,nh,lk,kd]
+    V = self.WV(v).contiguous().view([bs,lv,self.nh,self.vd]).permute(0,2,1,3) #=> [bs,lv,nh*vd] => [bs,lv,nh,vd] => [bs,nh,lv,vd]
+    #Scaled dot-product Attn from multiple Q, K, V vectors (bs*nh*l vectors)
+    Q = Q / math.sqrt(self.kd)
+    s = torch.matmul(Q, K.transpose(2, 3)) #[bs,nh,lq,qd] x [bs,nh,kd,lk] = [bs,nh,lq,lk] # thanks to qd==kd #in decoder lq are target words and lk are source words
+
+    #logging.info('s = {}'.format(s.shape))
+
+    if msk is not None:
+      s = s.masked_fill(msk == 0, float('-inf')) #score=-Inf to masked tokens
+    w = torch.nn.functional.softmax(s, dim=-1) #[bs,nh,lq,lk] (these are the attention weights)
+    #### Minh uses relu instead of softmax: w = torch.nn.functional.relu(s)
+    w = self.dropout(w) #[bs,nh,lq,lk] 
+
+    z = torch.matmul(w,V) #[bs,nh,lq,lk] x [bs,nh,lv,vd] = [bs,nh,lq,vd] #thanks to lk==lv
+    z = z.transpose(1,2).contiguous().view([bs,lq,self.nh*self.vd]) #=> [bs,lq,nh,vd] => [bs,lq,nh*vd]
+    z = self.WO(z) #[bs,lq,ed]
+    return self.dropout(z)

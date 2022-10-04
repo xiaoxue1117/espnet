@@ -76,6 +76,8 @@ class Speech2Text:
         quantize_lm: bool = False,
         quantize_modules: List[str] = ["Linear"],
         quantize_dtype: str = "qint8",
+        ee_strategy: str = "constant_layer",
+        ee_layer: int = 24,
     ):
         assert check_argument_types()
 
@@ -251,6 +253,8 @@ class Speech2Text:
         self.dtype = dtype
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
+        self.ee_strategy = ee_strategy
+        self.ee_layer = ee_layer
 
     @torch.no_grad()
     def __call__(
@@ -289,6 +293,26 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, _ = self.asr_model.encode(**batch)
+
+        # Early exit : here define the strategy, averaging ... 
+        if isinstance(enc, tuple):  # A DEBUGGUER, ON DIRAIT QUE LE MODEL NE PASSE PAS PAR LA !!!
+            enc, intermediate_outs = enc
+            # time to play ! 
+            # for now only easy thing 
+            if self.ee_strategy == "constant_layer": 
+                if self.ee_layer==24:
+                    enc = enc
+                else :
+                    assert 9==0
+                    assert self.ee_layer in [x[0] for x in intermediate_outs], "bad layer choice, this layer was not trained"
+                    for intermediate_out in intermediate_outs:
+                        if self.ee_layer == intermediate_out[0]:
+                            enc = intermediate_outs[1]  # double check dimension !!!
+            #elif self.ee_strategy == 
+            else : 
+                enc = enc
+
+
         if self.enh_s2t_task:
             # Enh+ASR joint task
             # NOTE (Wangyou): the return type in this case is List[default_return_type]
@@ -431,6 +455,8 @@ def inference(
     quantize_lm: bool,
     quantize_modules: List[str],
     quantize_dtype: str,
+    ee_strategy: str = "constant_layer",
+    ee_layer: int = 24,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -479,6 +505,8 @@ def inference(
         quantize_lm=quantize_lm,
         quantize_modules=quantize_modules,
         quantize_dtype=quantize_dtype,
+        ee_strategy=ee_strategy,
+        ee_layer=ee_layer,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -741,6 +769,21 @@ def get_parser():
         default=None,
         help="The model path of sentencepiece. "
         "If not given, refers from the training args",
+    )
+    group = parser.add_argument_group("Early Exit related")
+    group.add_argument(
+        "--ee_strategy",
+        type=str_or_none,
+        default="constant_layer",
+        choices=["constant_layer", None],
+        help="The early exit strategy"
+        "If not given, refers from the training args",
+    )
+    group.add_argument(
+        "--ee_layer",
+        type=int,
+        default=23,
+        help="The constant layer we want exit from",
     )
 
     return parser

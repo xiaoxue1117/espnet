@@ -185,7 +185,7 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
-            intermediate_outs = encoder_out[1]
+            intermediate_outs = encoder_out[1]  # double check format for Hubert outputs ! (dimensions)
             encoder_out = encoder_out[0]
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
@@ -210,7 +210,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 # we assume intermediate_out has the same length & padding
                 # as those of encoder_out
                 loss_ic, cer_ic = self._calc_ctc_loss(
-                    intermediate_out, encoder_out_lens, text, text_lengths
+                    intermediate_out, encoder_out_lens, text, text_lengths 
                 )
                 loss_interctc = loss_interctc + loss_ic
 
@@ -225,7 +225,7 @@ class ESPnetASRModel(AbsESPnetModel):
             # calculate whole encoder loss
             loss_ctc = (
                 1 - self.interctc_weight
-            ) * loss_ctc + self.interctc_weight * loss_interctc
+            ) * loss_ctc + self.interctc_weight * loss_interctc 
 
         if self.use_transducer_decoder:
             # 2a. Transducer decoder branch
@@ -327,7 +327,7 @@ class ESPnetASRModel(AbsESPnetModel):
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
-        if self.encoder.interctc_use_conditioning:
+        if self.encoder.interctc_use_conditioning: 
             encoder_out, encoder_out_lens, _ = self.encoder(
                 feats, feats_lengths, ctc=self.ctc
             )
@@ -335,8 +335,18 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
-            intermediate_outs = encoder_out[1]
+            intermediate_outs = encoder_out[1]   
             encoder_out = encoder_out[0]
+
+        if intermediate_outs is not None:
+            for ind, (layer_idx, intermediate_out) in enumerate(intermediate_outs) :
+                # we assume intermediate_out has the same length & padding
+                # as those of encoder_out
+                if self.encoder.heads :
+                    intermediate_out = self.encoder.ee_heads[ind](intermediate_out.permute(1,0,2))
+                else :
+                   intermediate_out = intermediate_out.permute(1,0,2)  # double check why is this needed! Should not be! 
+                intermediate_outs[ind]=(layer_idx, intermediate_out)
 
         # Post-encoder, e.g. NLU
         if self.postencoder is not None:

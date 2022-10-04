@@ -1,6 +1,10 @@
-beam_size: 20
-ctc_weight: 0.3
+beam_size: 4
+ctc_weight: 1.0
 lm_weight: 0.0
 maxlenratio: 0.0
 minlenratio: 0.0
 penalty: 0.0
+
+# try : 
+ee_strategy: "constant_layer"
+ee_layer: 23
