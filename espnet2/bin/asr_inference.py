@@ -78,6 +78,8 @@ class Speech2Text:
         quantize_dtype: str = "qint8",
         ee_strategy: str = "constant_layer",
         ee_layer: int = 24,
+        confidence_threshold: float = 1.0,
+        entropy_threshold: float = 0.0,
     ):
         assert check_argument_types()
 
@@ -255,6 +257,8 @@ class Speech2Text:
         self.enh_s2t_task = enh_s2t_task
         self.ee_strategy = ee_strategy
         self.ee_layer = ee_layer
+        self.confidence_threshold = confidence_threshold
+        self.entropy_threshold = entropy_threshold
 
     @torch.no_grad()
     def __call__(
@@ -295,23 +299,60 @@ class Speech2Text:
         enc, _ = self.asr_model.encode(**batch)
 
         # Early exit : here define the strategy, averaging ... 
-        if isinstance(enc, tuple):  # A DEBUGGUER, ON DIRAIT QUE LE MODEL NE PASSE PAS PAR LA !!!
+        if isinstance(enc, tuple): 
             enc, intermediate_outs = enc
             # time to play ! 
             # for now only easy thing 
             if self.ee_strategy == "constant_layer": 
+                self.out_layer = "constant"
                 if self.ee_layer==24:
                     enc = enc
                 else :
-                    assert 9==0
-                    assert self.ee_layer in [x[0] for x in intermediate_outs], "bad layer choice, this layer was not trained"
+                    assert self.ee_layer in [x[0] for x in intermediate_outs], ("bad layer choice, this layer was not trained, pick a layer from : ", [x[0] for x in intermediate_outs])
                     for intermediate_out in intermediate_outs:
                         if self.ee_layer == intermediate_out[0]:
-                            enc = intermediate_outs[1]  # double check dimension !!!
-            #elif self.ee_strategy == 
+                            #assert 9==0, (intermediate_out[1].shape, enc.shape)
+                            enc = intermediate_out[1]  # double check dimension !!!
+            elif self.ee_strategy == "random_layer":
+                nl = np.random.randint(len(intermediate_outs))
+                enc = intermediate_outs[nl][1]
+                self.out_layer = "rd"
+
+            elif self.ee_strategy == "confidence":
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    self.out_layer = n_layer
+                    enc = candidate
+                    aux = torch.max(torch.nn.functional.softmax(self.asr_model.ctc.ctc_lo(enc), dim=-1), dim=-1)
+                    confidence_score = aux.values.sum()/len(aux.values[0]) # here we can define a mask for blanks and other tokens !! Great comparison !!
+                    if confidence_score > self.confidence_threshold :
+                        break  # this way we take the last if no layer is good enough 
+
+            elif self.ee_strategy == "entropy_confidence":
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    self.out_layer = n_layer
+                    enc = candidate
+                    aux = torch.special.entr(torch.nn.functional.softmax(self.asr_model.ctc.ctc_lo(enc), dim=-1))
+                    entropy_score = aux.sum()/torch.numel(aux) # here we can define a mask for blanks and other tokens !! Great comparison !!
+                    if entropy_score < self.entropy_threshold :
+                        break  # this way we take the last if no layer is good enough 
+
+            
+            elif self.ee_strategy == "oracle_confidence":
+                liste_scores = []
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    aux = torch.max(torch.nn.functional.softmax(self.asr_model.ctc.ctc_lo(candidate), dim=-1), dim=-1)
+                    confidence_score = aux.values.sum()/len(aux.values[0]) # here we can define a mask for blanks and other tokens !! Great comparison !!
+                    liste_scores.append(confidence_score)
+                ind=np.argmax(np.array(liste_scores))
+                #assert 6==0, liste_scores It is very interesting to look at the actual scores for the samples
+                self.out_layer = ind
+                enc = intermediate_outs[ind][1]
+
             else : 
                 enc = enc
-
 
         if self.enh_s2t_task:
             # Enh+ASR joint task
@@ -339,7 +380,7 @@ class Speech2Text:
 
             # c. Passed the encoder result and the beam search
             results = self._decode_single_sample(enc[0])
-            assert check_return_type(results)
+            #assert check_return_type(results) for Early Exit we modify
 
         return results
 
@@ -358,9 +399,8 @@ class Speech2Text:
             )
         else:
             nbest_hyps = self.beam_search(
-                x=enc, maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                x=enc, maxlenratio=self.maxlenratio, minlenratio=self.minlenratio, n_layer=self.out_layer
             )
-
         nbest_hyps = nbest_hyps[: self.nbest]
 
         results = []
@@ -384,7 +424,7 @@ class Speech2Text:
                 text = self.tokenizer.tokens2text(token)
             else:
                 text = None
-            results.append((text, token, token_int, hyp))
+            results.append((text, token, token_int, hyp, self.out_layer))
 
         return results
 
@@ -457,6 +497,8 @@ def inference(
     quantize_dtype: str,
     ee_strategy: str = "constant_layer",
     ee_layer: int = 24,
+    confidence_threshold: float = 1.0,
+    entropy_threshold: float = 0.0,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -507,6 +549,8 @@ def inference(
         quantize_dtype=quantize_dtype,
         ee_strategy=ee_strategy,
         ee_layer=ee_layer,
+        confidence_threshold=confidence_threshold,
+        entropy_threshold=entropy_threshold,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -569,7 +613,7 @@ def inference(
             else:
 
                 # Normal ASR
-                for n, (text, token, token_int, hyp) in zip(
+                for n, (text, token, token_int, hyp, out_layer) in zip(
                     range(1, nbest + 1), results
                 ):
                     # Create a directory: outdir/{n}best_recog
@@ -579,6 +623,8 @@ def inference(
                     ibest_writer["token"][key] = " ".join(token)
                     ibest_writer["token_int"][key] = " ".join(map(str, token_int))
                     ibest_writer["score"][key] = str(hyp.score)
+                    ibest_writer["test_dan"][key] = "KBnueve"
+                    ibest_writer["EE_layers"][key] = str(out_layer)
 
                     if text is not None:
                         ibest_writer["text"][key] = text
@@ -600,7 +646,7 @@ def get_parser():
         help="The verbose level of logging",
     )
 
-    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True) 
     parser.add_argument(
         "--ngpu",
         type=int,
@@ -775,7 +821,7 @@ def get_parser():
         "--ee_strategy",
         type=str_or_none,
         default="constant_layer",
-        choices=["constant_layer", None],
+        choices=["constant_layer", "random_layer", "confidence", "entropy_confidence", None],
         help="The early exit strategy"
         "If not given, refers from the training args",
     )
@@ -784,6 +830,18 @@ def get_parser():
         type=int,
         default=23,
         help="The constant layer we want exit from",
+    )
+    group.add_argument(
+        "--confidence_threshold",
+        type=float,
+        default=1.0,
+        help="Threshold for exit based on argmax confidence score",
+    )
+    group.add_argument(
+        "--entropy_threshold",
+        type=float,
+        default=0.0,
+        help="Threshold for exit based on entropy confidence score",
     )
 
     return parser

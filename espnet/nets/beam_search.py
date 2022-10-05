@@ -328,7 +328,7 @@ class BeamSearch(torch.nn.Module):
         return best_hyps
 
     def forward(
-        self, x: torch.Tensor, maxlenratio: float = 0.0, minlenratio: float = 0.0
+        self, x: torch.Tensor, maxlenratio: float = 0.0, minlenratio: float = 0.0, n_layer: int = 76
     ) -> List[Hypothesis]:
         """Perform beam search.
 
@@ -396,6 +396,7 @@ class BeamSearch(torch.nn.Module):
             )
         logging.info(f"total log probability: {best.score:.2f}")
         logging.info(f"normalized log probability: {best.score / len(best.yseq):.2f}")
+        logging.info("output layer : {}".format(n_layer)) # this line was added for the Early Exit project
         logging.info(f"total number of ended hypotheses: {len(nbest_hyps)}")
         if self.token_list is not None:
             logging.info(

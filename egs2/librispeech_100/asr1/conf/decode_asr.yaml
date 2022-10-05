@@ -1,4 +1,4 @@
-beam_size: 4
+beam_size: 1
 ctc_weight: 1.0
 lm_weight: 0.0
 maxlenratio: 0.0
@@ -6,5 +6,7 @@ minlenratio: 0.0
 penalty: 0.0
 
 # try : 
-ee_strategy: "constant_layer"
+ee_strategy: "oracle_confidence"  #"entropy_confidence" #"oracle_confidence"  #"constant_layer" # "random_layer" #
 ee_layer: 23
+confidence_threshold: 0.90
+entropy_threshold: 0.005

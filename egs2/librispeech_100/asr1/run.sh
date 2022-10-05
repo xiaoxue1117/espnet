@@ -39,3 +39,7 @@ test_sets="test_clean test_other dev_clean dev_other"
 # ./run.sh --stage 12 --stop_stage 13 --test_sets dev_other_small --token_type char --expdir exp_decoding  --inference_nj 10 --asr_tag heads_5_10_15_20
 
 # sbatch -t 0  --cpus-per-task=2  --mem=30G --gres=gpu:2080Ti:1 run.sh --stage 11 --stop_stage 11  --token_type char --expdir exp_baselines2 --asr_config conf/hubertEE_FT_heads.yaml --asr_tag heads_5_10_15_20
+
+
+
+# sbatch -t 0  --cpus-per-task=10  --mem=120G --exclude tir-0-32,tir-1-32,tir-1-28,tir-0-3 run.sh --stage 1 --stop_stage 5 --train_set "train_fr" --valid_set "dev_fr" --test_sets "dev_fr test_as" --lang "fr" --local_data_opts "--lang fr" --audio_format "flac" --nj 10 --lm_train_text "data/train_fr/text"  --token_type char
