@@ -29,7 +29,7 @@ encoder_conf:
     attention_in_heads: false
     heads_ff_dim: 512
     heads_att_dim: 512
-    heads_layer_list: "10_15_20_23"
+    heads_layer_list: "9_14_19_23"  #"9_10_11_12_13_14_15_16_17_18_19_20_21_22_23"
 
 
 

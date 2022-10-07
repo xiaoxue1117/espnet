@@ -35,6 +35,8 @@ from espnet.nets.scorers.ctc import CTCPrefixScorer
 from espnet.nets.scorers.length_bonus import LengthBonus
 from espnet.utils.cli_utils import get_commandline_args
 
+from jiwer import cer, wer 
+
 
 class Speech2Text:
     """Speech2Text class
@@ -80,6 +82,10 @@ class Speech2Text:
         ee_layer: int = 24,
         confidence_threshold: float = 1.0,
         entropy_threshold: float = 0.0,
+        two_argmax_threshold: float = 1.0,
+        patience: int = 0,
+        patience_distance: str = "entropy",
+        patience_threshold: float = 1,
     ):
         assert check_argument_types()
 
@@ -259,6 +265,10 @@ class Speech2Text:
         self.ee_layer = ee_layer
         self.confidence_threshold = confidence_threshold
         self.entropy_threshold = entropy_threshold
+        self.two_argmax_threshold = two_argmax_threshold
+        self.patience = patience
+        self.patience_distance = patience_distance
+        self.patience_threshold = patience_threshold
 
     @torch.no_grad()
     def __call__(
@@ -318,7 +328,7 @@ class Speech2Text:
                 enc = intermediate_outs[nl][1]
                 self.out_layer = "rd"
 
-            elif self.ee_strategy == "confidence":
+            elif self.ee_strategy == "argmax_confidence":
                 for intermediate_out in intermediate_outs:
                     n_layer, candidate = intermediate_out[0], intermediate_out[1]
                     self.out_layer = n_layer
@@ -338,6 +348,26 @@ class Speech2Text:
                     if entropy_score < self.entropy_threshold :
                         break  # this way we take the last if no layer is good enough 
 
+            elif self.ee_strategy == "two_argmax_confidence":
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    self.out_layer = n_layer
+                    enc = candidate
+                    sftm = torch.nn.functional.softmax(self.asr_model.ctc.ctc_lo(enc), dim=-1)
+                    aux = torch.max(sftm, dim=-1)
+                    m, ind = aux.values[0], aux.indices[0]
+                    VAL=[]
+                    for i,line in enumerate(sftm):
+                        aux2 = line-m[i]*torch.ones_like(line)
+                        for k in range(len(aux2)):
+                            aux2[k][ind[k]]-=10
+                        val = torch.max(aux2)
+                        VAL.append(val)
+                    confidence_score = -1 * np.mean(np.array(VAL)) # also try with max
+                    print(confidence_score)
+                    if confidence_score > self.two_argmax_threshold : # we want this difference to be big, look at values (very tight) !!! 
+                        break  
+
             
             elif self.ee_strategy == "oracle_confidence":
                 liste_scores = []
@@ -350,6 +380,70 @@ class Speech2Text:
                 #assert 6==0, liste_scores It is very interesting to look at the actual scores for the samples
                 self.out_layer = ind
                 enc = intermediate_outs[ind][1]
+
+            
+            elif self.ee_strategy == "patience":
+
+                def dist(sftm, liste, criteria):
+                    if criteria == "entropy":
+                        liste_dist=[]
+                        for triple in liste:
+                            n_layer, vector, _ = triple
+                            liste_dist.append(torch.nn.functional.binary_cross_entropy(sftm, vector, reduction='mean'))  # check the calculation !!!
+
+                    elif criteria == "cer": 
+                        liste_dist=[]
+                        ids = "".join(self.converter.ids2tokens(torch.max(sftm, dim=-1).indices))
+                        for triple in liste:
+                            n_layer, vector, sftm_ = triple
+                            aux =  "".join(self.converter.ids2tokens(torch.max(sftm_, dim=-1).indices))
+                            liste_dist.append(cer(ids,aux)) # check values and scale !!
+                            print(ids)
+                            print(aux)
+                            print(cer(ids,aux))
+                    if len(liste_dist) == 0 :
+                        return 0.0
+                    return max(liste_dist)
+
+                liste_old = []
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    sftm = torch.nn.functional.softmax(self.asr_model.ctc.ctc_lo(candidate), dim=-1)
+                    if dist(sftm, liste_old, criteria=self.patience_distance) <= self.patience_threshold : 
+                        liste_old.append((n_layer, sftm, candidate))
+                        if len(liste_old) == self.patience +1 :
+                            n_layer, _ , enc = liste_old[0]  # here we return the first, note that we could return the last or the average
+                            break
+
+                    else :
+                        print(dist(sftm, liste_old, criteria=self.patience_distance))
+                        print("too far layers : ", [x[0] for x in liste_old], "and", n_layer)
+                        liste_old.append((n_layer, sftm, candidate))
+                        n_layer, _,  enc = liste_old[-1] # for the last one, if no layer succeeded before !    
+                        liste_old=liste_old[1:]
+                self.out_layer = n_layer
+
+
+            elif self.ee_strategy == "average": # naive averaging here !
+                self.liste_average_naif = [22, 23] # the last four layers.
+
+                # step 1 : store the representations 
+                liste_avg = []
+                for intermediate_out in intermediate_outs:
+                    n_layer, candidate = intermediate_out[0], intermediate_out[1]
+                    if n_layer in self.liste_average_naif:
+                        liste_avg.append(candidate)
+                
+                # step 2 : average at some level
+                # step 2.1. : representation level :
+                self.average_level = "representation"
+                if self.average_level == "representation" : 
+                    enc = liste_avg[0]
+                    for rpz in liste_avg[1:]:
+                        enc+=rpz
+                    enc = enc / len(liste_avg)
+                    self.out_layer = "avg"
+
 
             else : 
                 enc = enc
@@ -499,6 +593,10 @@ def inference(
     ee_layer: int = 24,
     confidence_threshold: float = 1.0,
     entropy_threshold: float = 0.0,
+    two_argmax_threshold: float = 1.0,
+    patience: int = 0,
+    patience_distance: str = "entropy",
+    patience_threshold: float = 1.0,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -551,6 +649,10 @@ def inference(
         ee_layer=ee_layer,
         confidence_threshold=confidence_threshold,
         entropy_threshold=entropy_threshold,
+        two_argmax_threshold=two_argmax_threshold,
+        patience=patience,
+        patience_distance=patience_distance,
+        patience_threshold=patience_threshold,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -821,9 +923,7 @@ def get_parser():
         "--ee_strategy",
         type=str_or_none,
         default="constant_layer",
-        choices=["constant_layer", "random_layer", "confidence", "entropy_confidence", None],
         help="The early exit strategy"
-        "If not given, refers from the training args",
     )
     group.add_argument(
         "--ee_layer",
@@ -843,6 +943,32 @@ def get_parser():
         default=0.0,
         help="Threshold for exit based on entropy confidence score",
     )
+    group.add_argument(
+        "--two_argmax_threshold",
+        type=float,
+        default=1.0,
+        help="Threshold for exit based on two argmax confidence score",
+    )
+    group.add_argument(
+        "--patience",
+        type=int,
+        default=0,
+        help="Number of consecutive layers that should be similar",
+    )
+    group.add_argument(
+        "--patience_distance",
+        type=str,
+        default="entropy",
+        help="Distance choice to measure similarity between layers",
+    )
+    group.add_argument(
+        "--patience_threshold",
+        type=float,
+        default=1.0,
+        help="Threshold for exit based on patience distance functions",
+    )
+    
+    
 
     return parser
 

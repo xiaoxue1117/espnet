@@ -1,0 +1,20 @@
+beam_size: 1
+ctc_weight: 1.0
+lm_weight: 0.0
+maxlenratio: 0.0
+minlenratio: 0.0
+penalty: 0.0
+
+# try : 
+ee_strategy: "entropy_confidence"  #"entropy_confidence" #"oracle_confidence"  #"constant_layer" # "random_layer" #"two_argmax_confidence"
+ee_layer: 9
+
+# confidence based : 
+confidence_threshold: 0.90
+entropy_threshold: 0.0045
+two_argmax_threshold: 0.55
+
+# patience based : 
+patience: 4
+patience_distance: "entropy"
+patience_threshold: 0.04

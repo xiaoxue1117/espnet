@@ -6,8 +6,8 @@ minlenratio: 0.0
 penalty: 0.0
 
 # try : 
-ee_strategy: "patience"  #"entropy_confidence" #"oracle_confidence"  #"constant_layer" #"random_layer" #"two_argmax_confidence"
-ee_layer: 23
+ee_strategy: "constant_layer"  #"entropy_confidence" #"oracle_confidence"  #"constant_layer" # "random_layer" #"two_argmax_confidence"
+ee_layer: 9
 
 # confidence based : 
 confidence_threshold: 0.90
@@ -15,6 +15,6 @@ entropy_threshold: 0.005
 two_argmax_threshold: 0.55
 
 # patience based : 
-patience: 2
-patience_distance: "cer"
-patience_threshold: 0.1
+patience: 4
+patience_distance: "entropy"
+patience_threshold: 0.04

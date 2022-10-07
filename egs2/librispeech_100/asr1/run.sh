@@ -7,7 +7,7 @@ set -o pipefail
 
 train_set="train_clean_100"
 valid_set="dev_other"
-test_sets="test_clean test_other dev_clean dev_other"
+test_sets="dev_clean dev_other"
 
 
 ./asr.sh \
@@ -22,8 +22,10 @@ test_sets="test_clean test_other dev_clean dev_other"
     --max_wav_duration 30 \
     --audio_format "flac.ark" \
     --feats_type raw \
-    --inference_asr_model "latest.pth" \
+    --inference_asr_model "valid.loss.ave.pth" \
     --nj 10 \
+    --inference_nj 10 \
+    --token_type char \
     --use_lm false \
     --train_set "${train_set}" \
     --valid_set "${valid_set}" \
@@ -38,8 +40,8 @@ test_sets="test_clean test_other dev_clean dev_other"
 
 # ./run.sh --stage 12 --stop_stage 13 --test_sets dev_other_small --token_type char --expdir exp_decoding  --inference_nj 10 --asr_tag heads_5_10_15_20
 
-# sbatch -t 0  --cpus-per-task=2  --mem=30G --gres=gpu:2080Ti:1 run.sh --stage 11 --stop_stage 11  --token_type char --expdir exp_baselines2 --asr_config conf/hubertEE_FT_heads.yaml --asr_tag heads_5_10_15_20
-
-
+# sbatch -t 0  --cpus-per-task=2  --mem=30G --gres=gpu:2080Ti:1 run.sh --stage 11 --stop_stage 11  --token_type char --expdir exp_baselines2 --asr_config conf/EE_tuning/hubertEE_FT_heads.yaml --asr_tag heads_9_to_23
 
 # sbatch -t 0  --cpus-per-task=10  --mem=120G --exclude tir-0-32,tir-1-32,tir-1-28,tir-0-3 run.sh --stage 1 --stop_stage 5 --train_set "train_fr" --valid_set "dev_fr" --test_sets "dev_fr test_as" --lang "fr" --local_data_opts "--lang fr" --audio_format "flac" --nj 10 --lm_train_text "data/train_fr/text"  --token_type char
+
+#sbatch -t 0  --cpus-per-task=10  --mem=120G --exclude tir-0-32,tir-1-32,tir-1-28,tir-0-3 run.sh --stage 12 --stop_stage 13   --asr_tag heads_9_to_23 --expdir exp_baselines2 --inference_tag T_constant_layer_9
