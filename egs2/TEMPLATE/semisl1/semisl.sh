@@ -916,8 +916,6 @@ if ! "${skip_train}"; then
 
 
     if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
-        echo "lalalalalala"
-        exit 1;
         _asr_train_dir="${data_feats}/${train_set}"
         _asr_valid_dir="${data_feats}/${valid_set}"
         log "Stage 10: ASR collect stats: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
