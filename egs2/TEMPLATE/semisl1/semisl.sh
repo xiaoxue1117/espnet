@@ -83,7 +83,8 @@ num_splits_lm=1   # Number of splitting for lm corpus.
 word_vocab_size=10000 # Size of word vocabulary.
 
 # ASR model related
-asr_task=asr   # ASR task mode. Either 'asr' or 'asr_transducer'.
+asr_task=asr  # ASR task mode. Either 'asr' or 'asr_transducer'. We keep it for decoding (maybe not necessary)
+semisl_task=semisl
 asr_tag=       # Suffix to the result dir for asr model training.
 asr_exp=       # Specify the directory path for ASR experiment.
                # If this option is specified, asr_tag is ignored.
@@ -205,6 +206,7 @@ Options:
 
     # ASR model related
     --asr_task         # ASR task mode. Either 'asr' or 'asr_transducer'. (default="${asr_task}").
+    --semisl_task
     --asr_tag          # Suffix to the result dir for asr model training (default="${asr_tag}").
     --asr_exp          # Specify the directory path for ASR experiment.
                        # If this option is specified, asr_tag is ignored (default="${asr_exp}").
@@ -977,7 +979,7 @@ if ! "${skip_train}"; then
 
         # shellcheck disable=SC2046,SC2086
         ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
-            ${python} -m espnet2.bin.${asr_task}_train \
+            ${python} -m espnet2.bin.${semisl_task}_train \
                 --collect_stats true \
                 --use_preprocessor true \
                 --bpemodel "${bpemodel}" \
@@ -1104,7 +1106,7 @@ if ! "${skip_train}"; then
             --num_nodes "${num_nodes}" \
             --init_file_prefix "${asr_exp}"/.dist_init_ \
             --multiprocessing_distributed true -- \
-            ${python} -m espnet2.bin.${asr_task}_train \
+            ${python} -m espnet2.bin.${semisl_task}_train \
                 --use_preprocessor true \
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \

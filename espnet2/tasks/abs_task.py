@@ -178,6 +178,7 @@ class AbsTask(ABC):
     # If you need more than one optimizers, change this value in inheritance
     num_optimizers: int = 1
     trainer = Trainer
+
     class_choices_list: List[ClassChoices] = []
 
     def __init__(self):
@@ -1118,23 +1119,31 @@ class AbsTask(ABC):
             torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
         # 2. Build model
-        model = cls.build_model(args=args)
-        if not isinstance(model, AbsESPnetModel):
+        model_t, model_s = cls.build_model(args=args)
+        if not isinstance(model_s, AbsESPnetModel):
             raise RuntimeError(
                 f"model must inherit {AbsESPnetModel.__name__}, but got {type(model)}"
             )
-        model = model.to(
+        model_s = model_s.to(
+            dtype=getattr(torch, args.train_dtype),
+            device="cuda" if args.ngpu > 0 else "cpu",
+        )
+        model_t = model_t.to(
             dtype=getattr(torch, args.train_dtype),
             device="cuda" if args.ngpu > 0 else "cpu",
         )
         for t in args.freeze_param:
-            for k, p in model.named_parameters():
+            for k, p in model_t.named_parameters():
+                if k.startswith(t + ".") or k == t:
+                    logging.info(f"Setting {k}.requires_grad = False")
+                    p.requires_grad = False
+            for k, p in model_s.named_parameters():
                 if k.startswith(t + ".") or k == t:
                     logging.info(f"Setting {k}.requires_grad = False")
                     p.requires_grad = False
 
         # 3. Build optimizer
-        optimizers = cls.build_optimizers(args, model=model)
+        optimizers = cls.build_optimizers(args, model=model_s) # model t is not optimized, just updated
 
         # 4. Build schedulers
         schedulers = []
@@ -1155,7 +1164,7 @@ class AbsTask(ABC):
             schedulers.append(scheduler)
 
         logging.info(pytorch_cudnn_version())
-        logging.info(model_summary(model))
+        logging.info(model_summary(model_s))
         for i, (o, s) in enumerate(zip(optimizers, schedulers), 1):
             suf = "" if i == 1 else str(i)
             logging.info(f"Optimizer{suf}:\n{o}")
@@ -1194,7 +1203,7 @@ class AbsTask(ABC):
                 valid_key_file = None
 
             collect_stats(
-                model=model,
+                model=model_s,
                 train_iter=cls.build_streaming_iterator(
                     data_path_and_name_and_type=args.train_data_path_and_name_and_type,
                     key_file=train_key_file,
@@ -1227,7 +1236,7 @@ class AbsTask(ABC):
             for p in args.init_param:
                 logging.info(f"Loading pretrained params from {p}")
                 load_pretrained_model(
-                    model=model,
+                    model=model_s,
                     init_param=p,
                     ignore_init_mismatch=args.ignore_init_mismatch,
                     # NOTE(kamo): "cuda" for torch.load always indicates cuda:0
@@ -1237,7 +1246,7 @@ class AbsTask(ABC):
                     else "cpu",
                 )
 
-            # 7. Build iterator factories
+            # 7. Build iterator factories    # ca je sens que ca va aider !!
             if args.multiple_iterator:
                 train_iter_factory = cls.build_multiple_iter_factory(
                     args=args,
@@ -1245,7 +1254,7 @@ class AbsTask(ABC):
                     mode="train",
                 )
             else:
-                train_iter_factory = cls.build_iter_factory(
+                train_iter_factory = cls.build_iter_factory(   # rajouter la meme pour unsup_iter_factory  mode="train"
                     args=args,
                     distributed_option=distributed_option,
                     mode="train",
@@ -1313,10 +1322,11 @@ class AbsTask(ABC):
             # Instead of it, define "Options" object and build here.
             trainer_options = cls.trainer.build_options(args)
             cls.trainer.run(
-                model=model,
+                model_s=model_s,
+                model_t=model_t,
                 optimizers=optimizers,
                 schedulers=schedulers,
-                train_iter_factory=train_iter_factory,
+                train_iter_factory=train_iter_factory,   # ici rajouter une autre ligne : unsup_iter_factory=...
                 valid_iter_factory=valid_iter_factory,
                 plot_attention_iter_factory=plot_attention_iter_factory,
                 trainer_options=trainer_options,

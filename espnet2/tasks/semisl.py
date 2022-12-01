@@ -63,7 +63,7 @@ from espnet2.train.abs_espnet_model import AbsESPnetModel
 from espnet2.train.class_choices import ClassChoices
 from espnet2.train.collate_fn import CommonCollateFn
 from espnet2.train.preprocessor import CommonPreprocessor
-from espnet2.train.trainer import Trainer
+from espnet2.train.trainer import Trainer, TrainerSemiSL
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import float_or_none, int_or_none, str2bool, str_or_none
@@ -161,7 +161,7 @@ decoder_choices = ClassChoices(
 )
 
 
-class ASRTask(AbsTask):
+class SemiSLTask(AbsTask):
     # If you need more than one optimizers, change this value
     num_optimizers: int = 1
 
@@ -186,7 +186,7 @@ class ASRTask(AbsTask):
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
-    trainer = Trainer
+    trainer = TrainerSemiSL
 
     @classmethod
     def add_task_arguments(cls, parser: argparse.ArgumentParser):
@@ -497,7 +497,22 @@ class ASRTask(AbsTask):
             model_class = model_choices.get_class(args.model)
         except AttributeError:
             model_class = model_choices.get_class("espnet")
-        model = model_class(
+        model_s = model_class(
+            vocab_size=vocab_size,
+            frontend=frontend,
+            specaug=specaug,
+            normalize=normalize,
+            preencoder=preencoder,
+            encoder=encoder,
+            postencoder=postencoder,
+            decoder=decoder,
+            ctc=ctc,
+            joint_network=joint_network,
+            token_list=token_list,
+            **args.model_conf,
+        )
+
+        model_t = model_class(
             vocab_size=vocab_size,
             frontend=frontend,
             specaug=specaug,
@@ -515,7 +530,7 @@ class ASRTask(AbsTask):
         # FIXME(kamo): Should be done in model?
         # 8. Initialize
         if args.init is not None:
-            initialize(model, args.init)
+            initialize(model_s, args.init)
 
-        assert check_return_type(model)
-        return model
+        assert check_return_type(model_s)
+        return model_s, model_t
