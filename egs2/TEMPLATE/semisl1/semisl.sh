@@ -977,7 +977,7 @@ if ! "${skip_train}"; then
         # NOTE: --*_shape_file doesn't require length information if --batch_type=unsorted,
         #       but it's used only for deciding the sample ids.
 
-        echo "${python} -m espnet2.bin.${semisl_task}_train \
+        echo " espnet2.bin.${semisl_task}_train \
                 --collect_stats true \
                 --use_preprocessor true \
                 --bpemodel ${bpemodel} \
