@@ -916,6 +916,8 @@ if ! "${skip_train}"; then
 
 
     if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
+        echo "lalalalalala"
+        exit 1;
         _asr_train_dir="${data_feats}/${train_set}"
         _asr_valid_dir="${data_feats}/${valid_set}"
         log "Stage 10: ASR collect stats: train_set=${_asr_train_dir}, valid_set=${_asr_valid_dir}"
@@ -976,7 +978,7 @@ if ! "${skip_train}"; then
 
         # NOTE: --*_shape_file doesn't require length information if --batch_type=unsorted,
         #       but it's used only for deciding the sample ids.
-        exit 1;
+
         echo " espnet2.bin.${semisl_task}_train \
                 --collect_stats true \
                 --use_preprocessor true \
