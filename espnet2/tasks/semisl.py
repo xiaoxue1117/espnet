@@ -164,7 +164,7 @@ decoder_choices = ClassChoices(
 class SemiSLTask(AbsTask):
     # If you need more than one optimizers, change this value
     num_optimizers: int = 1
-
+    import pdb; pdb.set_trace()
     # Add variable objects configurations
     class_choices_list = [
         # --frontend and --frontend_conf
