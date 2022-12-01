@@ -994,7 +994,7 @@ if ! "${skip_train}"; then
                 --valid_shape_file ${_logdir}/valid.JOB.scp \
                 --output_dir ${_logdir}/stats.JOB \
                 ${_opts} ${asr_args} || { cat $(grep -l -i error ${_logdir}/stats.*.log) ; exit 1; }"
-
+        exit 1;
         # shellcheck disable=SC2046,SC2086
         ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
             echo ${python} -m espnet2.bin.${semisl_task}_train \
