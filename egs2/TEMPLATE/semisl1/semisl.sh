@@ -977,23 +977,23 @@ if ! "${skip_train}"; then
         # NOTE: --*_shape_file doesn't require length information if --batch_type=unsorted,
         #       but it's used only for deciding the sample ids.
 
-        echo ${python} -m espnet2.bin.${semisl_task}_train \
+        echo "${python} -m espnet2.bin.${semisl_task}_train \
                 --collect_stats true \
                 --use_preprocessor true \
-                --bpemodel "${bpemodel}" \
-                --token_type "${token_type}" \
-                --token_list "${token_list}" \
-                --non_linguistic_symbols "${nlsyms_txt}" \
-                --cleaner "${cleaner}" \
-                --g2p "${g2p}" \
-                --train_data_path_and_name_and_type "${_asr_train_dir}/${_scp},speech,${_type}" \
-                --train_data_path_and_name_and_type "${_asr_train_dir}/text,text,text" \
-                --valid_data_path_and_name_and_type "${_asr_valid_dir}/${_scp},speech,${_type}" \
-                --valid_data_path_and_name_and_type "${_asr_valid_dir}/text,text,text" \
-                --train_shape_file "${_logdir}/train.JOB.scp" \
-                --valid_shape_file "${_logdir}/valid.JOB.scp" \
-                --output_dir "${_logdir}/stats.JOB" \
-                ${_opts} ${asr_args} || { cat $(grep -l -i error "${_logdir}"/stats.*.log) ; exit 1; }
+                --bpemodel ${bpemodel} \
+                --token_type ${token_type} \
+                --token_list ${token_list} \
+                --non_linguistic_symbols ${nlsyms_txt} \
+                --cleaner ${cleaner} \
+                --g2p ${g2p} \
+                --train_data_path_and_name_and_type ${_asr_train_dir}/${_scp},speech,${_type} \
+                --train_data_path_and_name_and_type ${_asr_train_dir}/text,text,text \
+                --valid_data_path_and_name_and_type ${_asr_valid_dir}/${_scp},speech,${_type} \
+                --valid_data_path_and_name_and_type ${_asr_valid_dir}/text,text,text \
+                --train_shape_file ${_logdir}/train.JOB.scp \
+                --valid_shape_file ${_logdir}/valid.JOB.scp \
+                --output_dir ${_logdir}/stats.JOB \
+                ${_opts} ${asr_args} || { cat $(grep -l -i error ${_logdir}/stats.*.log) ; exit 1; }"
         exit 1;
         # shellcheck disable=SC2046,SC2086
         ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
