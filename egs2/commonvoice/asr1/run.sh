@@ -25,7 +25,7 @@ else
   nbpe=150
 fi
 
-./asr.sh \
+./semisl.sh \
     --ngpu 1 \
     --lang "${lang}" \
     --local_data_opts "--lang ${lang}" \
